@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Queen settings</title>
+<style>
+  :root {
+    --ink: #19141f; --raise: #251e2e; --line: #3b3148; --ivory: #ede6d6; --dim: #a9a0b4; --gold: #d9b45f; --gold-ink: #2a1f06;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--ink); color: var(--ivory); font: 15px/1.55 var(--sans); -webkit-font-smoothing: antialiased; }
+  main { max-width: 520px; margin: 0 auto; padding: 56px 24px; }
+  h1 { font: 500 30px/1.2 var(--serif); }
+  h1 span { margin-right: 10px; color: var(--gold); font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols2", "DejaVu Sans", sans-serif; }
+  .lede { margin-top: 8px; color: var(--dim); }
+  form { margin-top: 32px; padding-top: 28px; border-top: 1px solid var(--line); display: grid; gap: 28px; }
+  label { display: block; margin-bottom: 8px; font-weight: 600; }
+  label small { color: var(--dim); font-size: inherit; font-weight: 400; }
+  input, select { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); color: inherit; font: inherit; }
+  input::placeholder { color: var(--dim); opacity: .6; }
+  .help { margin-top: 8px; color: var(--dim); font-size: 13.5px; }
+  a { color: var(--gold); text-underline-offset: 3px; }
+  .save { display: flex; align-items: center; gap: 14px; }
+  button { height: 40px; padding: 0 20px; border: 0; border-radius: 9px; background: var(--gold); color: var(--gold-ink); font: 600 14px var(--sans); cursor: pointer; }
+  button:hover { filter: brightness(1.07); }
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+  #status { color: var(--dim); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<main>
+  <h1><span>♛&#xFE0E;</span>Ask Queen settings</h1>
+  <p class="lede">Ask Queen works without any setup. These help when the free servers are busy.</p>
+
+  <form id="form">
+    <div>
+      <label for="token">Hugging Face token <small>(optional)</small></label>
+      <input id="token" type="password" placeholder="hf_…" autocomplete="off" spellcheck="false">
+      <p class="help">
+        Queen runs on free community GPUs with a small quota per visitor. Your own free token raises it.
+        A “read” token is enough: <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">create one on Hugging Face</a>.
+        It is stored in this browser and sent only to the Queen servers.
+      </p>
+    </div>
+
+    <div>
+      <label for="primary">Primary server</label>
+      <select id="primary">
+        <option value="boneyland">boneyland (default)</option>
+        <option value="hugging-apps">hugging-apps</option>
+      </select>
+      <p class="help">Both run the same model. If the primary doesn't answer, Ask Queen tries the other one.</p>
+    </div>
+
+    <div class="save">
+      <button type="submit">Save settings</button>
+      <span id="status" role="status"></span>
+    </div>
+  </form>
+</main>
+<script src="options.js"></script>
+</body>
+</html>

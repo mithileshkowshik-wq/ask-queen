@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Ask Queen",
+  "version": "0.1.0",
+  "description": "Explain chess moves on chess.com and lichess with the QUEEN chess language model.",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://*.hf.space/*"],
+  "options_page": "options.html",
+  "action": { "default_title": "Ask Queen settings", "default_icon": { "16": "icons/16.png", "48": "icons/48.png" } },
+  "content_scripts": [
+    {
+      "matches": ["https://www.chess.com/*", "https://lichess.org/*"],
+      "js": ["content/common.js", "content/lichess.js", "content/chesscom.js", "content/panel.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
