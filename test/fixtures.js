@@ -235,6 +235,27 @@ fixture("chesscom-variation-ancestry", { fen: VARIATION,
   highlight: [["g8"], ["f6"]], expect: fromStart(["e4", "e5", "Bc4", "Nf6"], VARIATION) });
 fixture("chesscom-localized", { fen: NC6, moves: ["e4", "e5", "Sf3", "Nc6"], selected: 3,
   highlight: [["b8"], ["c6"]], expect: current(NC6.replace("2 3", "0 1"), { sideSource: "lastmove" }) });
+// Verbatim structure of the live chess.com Game Review move list, captured by the owner on 2026-11-19
+// (/analysis/game/live/<id>/review): rows with data-whole-move-number, padded text around figurines,
+// offset-for-annotation-icon, and timestamp cells; no wc-simple-move-list or .move-list wrapper.
+function liveReview(moves, selected) {
+  const piece = { N: "knight", B: "bishop", R: "rook", Q: "queen", K: "king" };
+  const node = (san, i) => {
+    const color = i % 2 ? "black" : "white";
+    const text = san.replace(/^([NBRQK])(.*)$/, (_, p, rest) =>
+      `<span class="icon-font-chess ${piece[p]}-${color} " data-figurine="${p}"></span> ${rest}`);
+    return `<div data-node="0-${i}" class="node ${color}-move main-line-ply"> <span class="node-highlight-content offset-for-annotation-icon${i === selected ? " selected" : ""}">${/^[NBRQK]/.test(san) ? text : san} </span></div>`;
+  };
+  const rows = [];
+  for (let i = 0; i < moves.length; i += 2) {
+    rows.push(`<div class="main-line-row move-list-row ${i % 4 ? "dark" : "light"}-row" data-whole-move-number="${i / 2 + 1}">${i / 2 + 1}.  ${node(moves[i], i)}  ${moves[i + 1] ? node(moves[i + 1], i + 1) : ""}  <div data-move-list-el="timestamp" data-ply="${i + 1}" data-time="46" class="time-white">4.6s</div></div>`);
+  }
+  return `<div class="move-list-container">${rows.join("")}</div>`;
+}
+fixture("chesscom-live-markup", { url: "/analysis/game/live/187446826044/review?move=4", fen: ITALIAN, highlight: [["f1"], ["c4"]],
+  customTree: liveReview(OPENING, 4), expect: fromStart(OPENING, ITALIAN) });
+fixture("chesscom-live-markup-black", { url: "/analysis/game/live/187446826044/review?move=3", fen: NC6, highlight: [["b8"], ["c6"]],
+  customTree: liveReview(OPENING.slice(0, 4), 3), expect: fromStart(OPENING.slice(0, 4), NC6) });
 fixture("chesscom-text-figurines", { url: "/analysis", fen: ITALIAN, highlight: [["f1"], ["c4"]],
   customTree: review(["e4", "e5", "♘f3", "♞c6", "♗c4"], 4), expect: fromStart(OPENING, ITALIAN) });
 fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1, finished: false,

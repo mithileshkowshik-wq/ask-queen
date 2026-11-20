@@ -1,7 +1,8 @@
 (() => {
   const BOARD = "wc-chess-board, chess-board";
   const C = globalThis.AQChess;
-  const LIST = "wc-simple-move-list .node, .move-list .node, vertical-move-list .node, .play-controller-moveList .node";
+  // Live Game Review (2026-11-19): div.main-line-row.move-list-row[data-whole-move-number] > div.node[data-node="0-N"].
+  const LIST = "wc-simple-move-list .node, .move-list .node, .move-list-row .node, vertical-move-list .node, .play-controller-moveList .node";
   const VARIATION = ".subline, .variation, [class*='subline']";
   const USER_MARK = /rgb\((?:235, 97, 80|172, 206, 89|82, 176, 220|255, 170, 0)\)/;
   const FIGURINES = { n: "N", b: "B", r: "R", q: "Q", k: "K",
@@ -47,7 +48,8 @@
       if (node.matches(".move-info, .eval, .time, .clock, .glyph")) return "";
       return [...node.childNodes].map(walk).join("");
     }
-    return AQ.readSan(walk(el.querySelector(".node-highlight-content") || el));
+    // Live markup pads the text around figurines ("<span data-figurine=B></span> f4 "); whitespace is never part of SAN.
+    return AQ.readSan(walk(el.querySelector(".node-highlight-content") || el).replace(/\s+/g, ""));
   }
 
   function moves() {

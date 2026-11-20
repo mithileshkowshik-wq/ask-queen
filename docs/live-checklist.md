@@ -53,6 +53,26 @@ Signed by the owner: PENDING
 To complete this record, the owner should repeat the check on the release build (1.0.0), fill in the fields marked
 "not recorded", and replace PENDING with a name and date.
 
+### chess.com, 2026-11-19, build 1.0.0 (first pass)
+
+**Status: reported by the owner in chat; owner signature pending.** Transcribed by the coordinator from the owner's
+screenshots of a finished game in chess.com Game Review (`/analysis/game/live/187446826044/review?move=16`).
+
+```
+Date:                2026-11-19
+Site and page:       chess.com, Game Review (finished live game)
+Extension version:   1.0.0 (commit before the live fix)
+Selected move:       9.O-O (ply 16)
+Asked:               Best move (Explain was not offered; see result)
+Expected position:   r1bq1rk1/p3bppp/1p2pn2/3p4/3P1B2/3BPN2/PP1N1PPP/R2Q1RK1 b - - (after 9.O-O), Black to move
+Position read:       "Position on the board, Black to move", with the side detected from the last move; castling
+                     correctly none for both sides; the analysis names the same pieces (Bf4, Bd3, Nb8, Be7, d4/d5)
+Result:              Launcher appeared (gating correct) and the board was read correctly. The move list was NOT used,
+                     because padded figurine text was rejected; this was fixed after the check (see
+                     docs/review/CHANGELOG-review.md, "Live fix"). Explain still needs a re-check on the fixed build.
+Signed by the owner: PENDING
+```
+
 ### lichess (optional)
 
 No live check recorded.
