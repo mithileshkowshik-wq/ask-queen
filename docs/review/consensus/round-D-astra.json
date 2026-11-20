@@ -1,0 +1,39 @@
+{
+  "reviewer": "gpt-6.2-astra",
+  "approve": false,
+  "required_changes": [
+    {
+      "doc": "rubric.md",
+      "section": "Scoring procedure 1",
+      "change": "Give the zero-score branch an evidence-based trigger that is exclusive of the partial-credit formula. Correct the stated partial-score ranges to 3–5 and 6–8 for the formulas as written.",
+      "why": "Round-C item 1 is partly resolved. The 6-versus-7 overlap is gone, but a C9 build with passing tests of shipped code and no DOM-fixture tests still qualifies for both 0 and 3. It fits neither level-3 description and falls short of level 6. Also, a fraction strictly below 1 cannot yield 2.5 after multiplication by 2.5 and rounding down."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§3.3, Explain post-response check",
+      "change": "Scope “Every other square is identical” to squares outside the move-specific set listed immediately above it.",
+      "why": "Round-C item 3's Bc4 case is resolved by exact single-move application and the positive and negative fixtures. The detailed rule still gives conflicting expectations for special moves. A correct O-O reply changes h1 and f1 as well as e1 and g1. The castling rule permits those rook changes, but the subsequent from-square/to-square rule requires every other square to stay identical. En passant has the same conflict on the captured pawn's square."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§4.1, 4.3–4.4 and rubric C2(9)",
+      "change": "State in §4.4 that two idle timeouts end in `timeout`, and define when `all_unavailable` applies to the remaining pairs of transient failures.",
+      "why": "Round-C item 4's retry timing is resolved. The primary aborts at 45 seconds, and a successful backup completes the ask. For two silent streams, §4.1 and C2 require `timeout`, while the same pair meets §4.4's definition of `all_unavailable`. The error-state test still has two expected codes."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§6, Close focus order",
+      "change": "Use the previously focused page element only if it can still receive focus. Otherwise continue to the document-body fallback.",
+      "why": "Round-C item 5 is partly resolved. The new order handles a removed target. If navigation leaves the previously focused site control in the document but hidden or disabled, step 2 still selects it, and the required focus transfer cannot succeed."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§4.5, SAN-to-UCI verification and rubric H7",
+      "change": "Require any SAN origin disambiguation to match the UCI from-square before treating the prose move as verified.",
+      "why": "This is a new blocker. After 1.d4 d5 2.Nf3 Nf6, both white knights can reach d2. Prose `Nbd2` and server UCI `f3d2` pass every listed comparison, yet they move different knights. The rule would allow a verified headline or agreement verdict for a move the server did not confirm."
+    }
+  ],
+  "optional_suggestions": [
+    "Round-C items 2, 6 and 7 are resolved. Section 3.3 checks the full zero-ply placement and known side against the root. Section 1 requires protected token storage and a content-script read test. Sections 4.7 and 7 agree that a custom origin receives no Authorization header until the user approves sending the token there."
+  ]
+}

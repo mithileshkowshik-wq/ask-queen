@@ -1,4 +1,4 @@
-# Ask Queen: target spec (what a 9/10 looks like), v3
+# Ask Queen: target spec (what a 9/10 looks like), v4 (frozen)
 
 This spec is merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts. The rubric cites its sections as §N. The fixed constraints are listed in `rubric.md`.
 
@@ -78,8 +78,8 @@ On a mismatch, discard the list, use the board, and say "The move list and the b
   - **What each differing square must hold:**
     - The from-square holds the moving piece (a pawn for a promotion) in the returned position and is empty in the snapshot.
     - The to-square holds the moved piece (the promoted piece for a promotion) in the snapshot.
-    - Every other square is identical.
-  - The SAN's piece letter, its disambiguation and its destination must match the squares found.
+    - Every square outside that move-specific set is identical. On a capture, the to-square holds the captured piece of the opponent's colour in the returned position.
+  - The SAN's piece letter, its disambiguation (origin file and/or rank) and its destination must match the squares found.
   - Fixtures: one positive (the correct pre-move reply) and one negative (the same reply with an unrelated piece moved, for example a2 to a3, which must be rejected).
 
 On a mismatch, replace the result with "Queen analysed a different position" and offer the board fallback.
@@ -154,6 +154,7 @@ Cancel, closing the panel, a new ask, navigation and closing the tab all abort t
 ### 4.4 Error codes (assigned in the background, never by regex in the panel)
 `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, and `all_unavailable` (both servers failed with transient errors).
 - `busy` means a Gradio queue-full message, or an HTTP 429 without quota wording.
+- **Code after a fallback:** if both attempts fail with the **same** transient code, report that code; two idle timeouts give `timeout`. If they fail with **different** transient codes, report `all_unavailable`. A non-transient code on either attempt is reported as it is.
 - Each code has a test fixture.
 - `illegal_position` from a move list offers the board fallback.
 - **Validate the response shape:** `analysis` must be a string, `best_move_san` a string or null, and `fen` a string. Anything else is `bad_response` ("The server's format changed. Check for an update."). Discard any HTML or SVG supplied by the server.
@@ -162,13 +163,13 @@ Cancel, closing the panel, a new ask, navigation and closing the tab all abort t
 Moves are trusted in this order (**source precedence**). Only verified moves (the first two levels) may become the headline or drive the agree/disagree verdict.
 1. **Structured (verified):** the Space's `best_move_san` when `move_source` is `best_move` or `critical_line`. The Space checks these for legality.
 2. **Prose confirmed by the server (verified):** a SAN taken from the prose that passes the §3.2 pattern (case-sensitive, never `/i`) **and** matches the first legality-checked move the Space returned (`critical_line_uci[0]` on boneyland, `critical_line.legal_steps[0].uci` on hugging-apps). It is labelled "taken from Queen's text".
-   - **How to match SAN against UCI:** take the piece on the UCI from-square in the returned `fen`. Its type must equal the SAN piece (a pawn if there is no letter). The UCI to-square must equal the SAN destination, and the promotion letters must agree. For castling, compare against `e1g1`, `e1c1`, `e8g8` or `e8c8`.
+   - **How to match SAN against UCI:** take the piece on the UCI from-square in the returned `fen`. Its type must equal the SAN piece (a pawn if there is no letter). The UCI to-square must equal the SAN destination. Any SAN disambiguation (origin file and/or rank, and a pawn capture's origin file) must match the UCI from-square: `Nbd2` versus `f3d2` fails. The promotion letters must agree. For castling, compare against `e1g1`, `e1c1`, `e8g8` or `e8c8`.
 3. **Unverified prose:** passes the pattern but has no server confirmation, so it may be illegal (for example `Qh5` at the start). The card headline reads "Queen didn't name a clear move", the move appears only as "Queen's text suggests X (unverified)", and there is no verdict.
 4. **`promising_or_analysis` or `random_legal_fallback` guesses from the server:** never shown as Queen's move. If one conflicts with the prose, the prose wins under rule 2 or 3.
 
 **Expected card for the recorded truncated reply** (`test/fixtures/boneyland-truncated.sse`): the headline is "Queen didn't name a clear move". "The answer was cut off" sits directly under the headline, with "Try the other server". Then "Queen's text suggests 3...Be7 (unverified)". There is no verdict, no evaluation row (it is null), and no critical-line row (it is empty). The analysis text follows.
 
-- **Truncation:** a truncated answer (`finish_reason: "length"`) is flagged at the top, with a "Try the other server" action.
+- **Truncation:** a truncated answer (`finish_reason: "length"`) is flagged directly under the headline, with a "Try the other server" action.
 - Never render `raw_text` or `<PIECE_…>` / `<SQUARE_…>` tokens.
 
 ### 4.6 Caching and courtesy toward the Spaces
@@ -254,7 +255,7 @@ The open panel must cover neither the board nor the site's move navigation at 12
 ## 6. Accessibility (WCAG 2.2 AA for the extension's UI)
 - **Focus.** Everything is reachable by keyboard. Opening the panel moves focus inside it. Closing the panel moves focus to the first of these that applies:
   1. the launcher, if it is visible
-  2. the page element that had focus before the panel opened, if it is still in the document
+  2. the page element that had focus before the panel opened, if it is still in the document **and can still receive focus** (connected, rendered, not disabled, not `inert`)
   3. `document.body`, for example after navigating to a page where the launcher is hidden
 - **The panel is a labelled dialog** that is non-modal, with no focus trap.
 - **Escape** closes the panel only when focus is inside it. Panel key events don't reach the site's shortcut handlers.
@@ -416,6 +417,16 @@ Every blocking change from all three reviewers was applied:
   - the `busy` and `all_unavailable` codes
   - how to match SAN against UCI
   - placement of the truncation notice
+
+## Changes in v4 (after agreement round D, applied by the coordinator, Opus 5.5)
+Opus 5.5 and Fable 5.2 approved v3. GPT-6.2-astra withheld approval with 5 narrow items. All 5 were applied exactly as requested:
+- an exclusive rule for a score of 0, and corrected score ranges
+- the scope of "other squares" for castling and en passant
+- `timeout` versus `all_unavailable` precedence
+- focusability in the close-focus order
+- SAN disambiguation checked against the UCI from-square
+
+Clarifications suggested by Opus and Fable were also added. Round D was the last allowed round, so v4 is **frozen without a further vote**, and GPT-6.2-astra's final approval is recorded as "items resolved, not re-voted".
 
 ## Recorded dissent (from the drafts)
 - **Closing the panel.** The Fable draft wanted an in-flight answer to keep running after the panel closes, with an "answer ready" launcher state. The Opus and GPT-6.2-astra drafts wanted close to cancel. The majority won: §4.2 has close cancel the request.

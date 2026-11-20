@@ -1,4 +1,4 @@
-# Ask Queen: scoring rubric (v3, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
+# Ask Queen: scoring rubric (v4, frozen, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
 
 A **9** means "ready to submit to the Chrome Web Store, and a serious club player would trust it". The target behaviour is defined in [`spec.md`](spec.md), which this rubric cites by section (§).
 
@@ -7,9 +7,10 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
    - **Levels 6, 9 and 10** are lists of positive **conditions**. Each bullet or lettered item counts as one condition. A level is earned only when every condition at that level and at the levels below it is met.
    - **The text at level 3** only describes what such a build typically looks like. It is not a requirement. Any build that meets all the level-6 conditions scores at least 6, whatever the level-3 text says.
    - **The formula below is the only rule, and it gives exactly one score.** `⌊x⌋₀.₅` means round x down to the nearest 0.5. `n6/N6`, `n9/N9` and `n10/N10` are the number of conditions met out of the total at each level.
-     - **0** if the build doesn't fit the level-3 description at all (for example, the feature is missing).
-     - **Not all level-6 conditions met:** score = `3 + ⌊2.5 × n6/N6⌋₀.₅`, which gives 3 to 5.5.
-     - **All level-6 conditions met, not all level-9:** score = `6 + ⌊2.5 × n9/N9⌋₀.₅`, which gives 6 to 8.5.
+     - **0** only when the criterion's feature is entirely absent: no shipped code or artifact addresses it at all. Otherwise use the formula, even if the build doesn't match the level-3 description.
+     - **Not all level-6 conditions met:** score = `3 + ⌊2.5 × n6/N6⌋₀.₅`, which gives 3 to 5.
+     - **All level-6 conditions met, not all level-9:** score = `6 + ⌊2.5 × n9/N9⌋₀.₅`, which gives 6 to 8.
+     - **Counting conditions:** each bullet or lettered item counts as one condition, and so does each nested sub-bullet. For example, the Survival and Timeout tests in C2 level 9 are two conditions.
      - **All level-9 conditions met:** score = `9 + ⌊n10/N10⌋₀.₅`, which gives 9, 9.5 (half or more of level 10) or 10 (all of level 10).
 2. **No evidence, no credit.** A condition counts as met only when you cite one of these:
    - a passing test name in `docs/review/evidence/round-N/report.json`
