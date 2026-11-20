@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reviewer", "approve", "required_changes", "optional_suggestions"],
+  "properties": {
+    "reviewer": { "type": "string" },
+    "approve": { "type": "boolean" },
+    "required_changes": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["doc", "section", "change", "why"], "properties": { "doc": { "type": "string" }, "section": { "type": "string" }, "change": { "type": "string" }, "why": { "type": "string" } } } },
+    "optional_suggestions": { "type": "array", "items": { "type": "string" } }
+  }
+}
