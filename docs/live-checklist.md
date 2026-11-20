@@ -116,6 +116,73 @@ Result:              launcher shown; move list read; Explain offered. Keyboard s
 Signed by the owner: Mithilesh Kowshik, 2026-11-19 (in chat: "confirmed 73f0d99 – Mithilesh Kowshik")
 ```
 
+**Note on the shortcut, added in fix pass 4. The record above is unchanged.** On this build the owner's first ⌥Q
+press did nothing. Chrome had not bound the new command's key on the existing install, so no key was assigned. After
+the owner bound it at `chrome://extensions/shortcuts`, ⌥Q opened the panel. The README now says to set the key there
+if the shortcut does nothing.
+
+### Final commit check (to be filled and signed by the owner)
+
+Not yet done. Run it on the commit that will be packaged and uploaded, with the extension reloaded from that commit.
+It needs one Explain and one Best move on a finished chess.com game, each with the position copied by **Copy FEN**.
+Leave nothing as "not recorded".
+
+```
+Date:
+Commit hash (git rev-parse --short HEAD):
+Extension version (chrome://extensions):
+Site and page (chess.com Game Review or Analysis, finished game):
+
+Explain
+  Selected move:
+  Button pressed (its exact label):
+  Expected position (FEN before the selected move):
+  Copy FEN from the answer:
+  Do they match (placement, side to move, castling, en passant)?
+
+Best move
+  Selected move:
+  Button pressed (its exact label):
+  Expected position (FEN after the selected move):
+  Copy FEN from the answer:
+  Do they match (placement, side to move, castling, en passant)?
+
+Launcher hidden on a game in progress (yes / no / not checked):
+Keyboard shortcut (key shown in the panel footer, and whether it opens the panel):
+Anything wrong or surprising:
+Signed by the owner (name and date):
+```
+
 ### lichess (optional)
 
-No live check recorded.
+No live check recorded. This is the path the Chrome Web Store reviewer is told to follow in
+`store/reviewer-instructions.md`, and it needs no account, so one pass before upload is worth doing.
+
+```
+Date:
+Commit hash:
+Extension version:
+
+Analysis board (https://lichess.org/analysis), after playing 1. e4 e5 2. Nf3 Nc6 3. Bc4
+  "Ask Queen" button shown (yes / no):
+  First-use notice shown on the first open, then "Got it" (yes / no):
+  Buttons offered (expected "Explain 3.Bc4" and "Best move for Black"):
+  Explain 3.Bc4: Copy FEN from the answer
+    (expected r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3):
+  Best move for Black: Copy FEN from the answer
+    (expected r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3):
+  Buttons follow the board when stepping back one move (yes / no):
+
+Where the button must not appear
+  A puzzle (https://lichess.org/training):
+  The home page (https://lichess.org):
+  A game in progress, if one is at hand:
+
+Optional extras
+  A study chapter:
+  A finished game:
+
+If "The free quota is used up" appeared, what was done (waited / added a token), and did "Try again" then work:
+Anything wrong or surprising:
+Signed by the owner (name and date):
+```

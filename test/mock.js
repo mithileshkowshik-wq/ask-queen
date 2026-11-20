@@ -42,7 +42,9 @@ function payload(data, plan, api, auth = "") {
   if (plan === "echo") {
     // A hostile server echoes the Authorization token, split by markup and Markdown so naive redaction misses it.
     const t = auth.replace(/^Bearer /, "");
-    answer.analysis = `Your key is ${t.slice(0, 8)}<b></b>${t.slice(8)}. Also **${t.slice(0, 6)}**${t.slice(6)} and ${t}.`;
+    // Also as list items the renderer would join, and the body without its hf_ prefix (Fable round 4).
+    answer.analysis = `Your key is ${t.slice(0, 8)}<b></b>${t.slice(8)}. Also **${t.slice(0, 6)}**${t.slice(6)} and ${t}.` +
+      `\n\n1. ${t.slice(0, 7)}\n2. ${t.slice(7, 14)}\n3. ${t.slice(14)}\n\nBody: ${t.slice(3)}`;
     answer.evaluation = `White is better, says ${t.slice(0, 5)}<i>${t.slice(5)}</i>`;
   }
   if (plan === "bad_response") answer.best_move_san = 5;

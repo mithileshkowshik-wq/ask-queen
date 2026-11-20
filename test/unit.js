@@ -145,7 +145,8 @@ function runUnits(test) {
       assert.equal(AQ.boardFromPieces(F.expand(F.START), ["d1", "e1"]).side, null);
       assert.equal(AQ.boardFromPieces(F.expand(F.E4), ["e2", "e4", "h8"]).side, null);
       assert.equal(AQ.boardFromPieces(F.expand(F.E4), ["e2", "e4"]).side, "b");
-      assert.equal(AQ.boardFromPieces(F.expand(F.E4), ["e2", "e4"]).ep, "e3");
+      assert.equal(AQ.boardFromPieces(F.expand(F.E4), ["e2", "e4"]).ep, "-", "no black pawn can take");
+      assert.equal(AQ.boardFromPieces(F.expand(F.E4_EP), ["e2", "e4"]).ep, "e3", "the d4 pawn can take");
       assert.equal(AQ.boardFromPieces(F.expand(F.E4), ["e6", "e4"]).ep, "-");
     } finally { doc.close(); }
   });
@@ -162,10 +163,16 @@ function runUnits(test) {
         const { w } = doc, full = w.AQ.readPosition();
         const layout = () => { throw new Error("layout read in AQ.gate()"); };
         w.Element.prototype.getBoundingClientRect = w.Element.prototype.getClientRects = layout;
+        const style = w.getComputedStyle;
         w.getComputedStyle = layout;
         const cheap = w.AQ.gate();
+        w.getComputedStyle = style; // AQ.confirm() may read style (checkVisibility in Chrome), never rects
         assert.equal(cheap.hasBoard, !!full, id);
-        assert.equal(cheap.gate, full ? full.gate : null, id);
+        // The cheap gate may only be more open than the full read when CSS hides the evidence; AQ.confirm() (style,
+        // not layout) then keeps the launcher closed.
+        if (cheap.gate === null && full?.gate) assert.equal(w.AQ.confirm(), false, id + " confirm");
+        else assert.equal(cheap.gate, full ? full.gate : null, id);
+        if (full?.gate === null) assert.equal(w.AQ.confirm(), true, id + " confirm");
       } finally { doc.close(); }
     }
   });
@@ -190,6 +197,27 @@ function runUnits(test) {
       assert.equal(w.AQ.confirm(), false);
     } finally { doc.close(); }
   });
+  test("A lichess FEN input a step behind the board gets one re-read 300 ms later, not a loop", async () => {
+    const doc = fixtureDoc("lichess-fen-mismatch");
+    try {
+      const { AQ, document } = doc.w;
+      const host = document.createElement("div");
+      host.dataset.testid = "aq-host";
+      document.documentElement.append(host);
+      assert.equal(AQ.readPosition().crossCheck.reason, "The site FEN disagrees with the board");
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const first = host.getAttribute("data-aq-recheck");
+      assert(first, "the open panel's observer is nudged");
+      AQ.readPosition();
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      assert.equal(host.getAttribute("data-aq-recheck"), first, "the same disagreement is not retried");
+    } finally { doc.close(); }
+  });
+  test("Very long provider prose is capped at 20,000 characters before it is parsed", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const r = bg.normalized([{ ...F.boneylandSuccess, analysis: "**a** ".repeat(30000) }], "boneyland", req, "boneyland", 1);
+    assert(r.analysis.length <= 20000);
+  });
   test("A moving piece keeps the board unreadable until it lands", () => {
     for (const id of ["lichess-animation", "chesscom-animation"]) {
       const doc = fixtureDoc(id);
@@ -208,17 +236,17 @@ function runUnits(test) {
     assert(C.verifyBest(F.ITALIAN, { placement, side, castle: "KQkq", ep: "-" }));
     assert.equal(C.verifyBest(F.ITALIAN, { placement, side, castle: "kq", ep: "-" }), false);
     assert.equal(C.verifyBest(F.ITALIAN, { placement, side, castle: "KQkq", ep: "e3" }), false);
-    const explain = (castle) => bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6 }], "boneyland",
-      { mode: "explain", played: "Bc4", snapshot: { placement, side, castle, ep: "-" } }, "boneyland", 1).positionCheck;
+    const ask = (castle) => ({ ...makeRequest("explain", F.START, "e4 e5 Nf3 Nc6", { played: "Bc4", position: F.ITALIAN }),
+      snapshot: { placement, side, castle, ep: "-" } });
+    const explain = (castle) => bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6 }], "boneyland", ask(castle), "boneyland", 1).positionCheck;
     assert.equal(explain("KQkq"), "ok");
     assert.equal(explain("kq"), "ok");
-    const narrow = bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6.replace("KQkq", "Kkq") }], "boneyland",
-      { mode: "explain", played: "Bc4", snapshot: { placement, side, castle: "KQkq", ep: "-" } }, "boneyland", 1);
+    const narrow = bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6.replace("KQkq", "Kkq") }], "boneyland", ask("KQkq"), "boneyland", 1);
     assert.equal(narrow.positionCheck, "mismatch");
-    const ask = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
-    assert(bg.validAsk({ ...ask, snapshot: { ...ask.snapshot, castle: "KQkq", ep: "-" } }));
+    const best = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    assert(bg.validAsk({ ...best, snapshot: { ...best.snapshot, castle: "KQkq", ep: "-" } }));
     for (const bad of [{ castle: "KQkq" }, { castle: "", ep: "-" }, { castle: "QK", ep: "-" }, { castle: "-", ep: "e4" }])
-      assert.equal(bg.validAsk({ ...ask, snapshot: { ...ask.snapshot, ...bad } }), false, JSON.stringify(bad));
+      assert.equal(bg.validAsk({ ...best, snapshot: { ...best.snapshot, ...bad } }), false, JSON.stringify(bad));
   });
   test("Prose is confirmed only by the answering provider's own legality field", () => {
     const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
@@ -285,7 +313,8 @@ function runUnits(test) {
     const structured = bg.normalized([{ ...F.boneylandSuccess, best_move_san: "Nf6", best_move_uci: "g8f6", move_source: "critical_line" }],
       "boneyland", req, "boneyland", 1);
     assert.equal(structured.best.san, "Nf6");
-    assert.equal(structured.evaluationText, "Black is slightly better (≈ −0.3)");
+    assert.equal(structured.evaluation, 0.3);
+    assert.equal(structured.evaluationText, null, "a bare number has no sign convention, so no Evaluation row");
     assert.equal(bg.normalized([{ ...F.boneylandSuccess, fen: F.FEN_MISMATCH }], "boneyland", req, "boneyland", 1).positionCheck, "mismatch");
     for (const raw of [[], [{}], [{ ...F.boneylandSuccess, best_move_san: 1 }], [{ ...F.boneylandSuccess, analysis: {} }]])
       assert.throws(() => bg.normalized(raw, "boneyland", req, "boneyland", 1), { code: "bad_response" });
@@ -337,6 +366,18 @@ function runUnits(test) {
     assert.equal(bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6 }], "boneyland", explain, "boneyland", 1).positionCheck, "ok");
     assert.equal(bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6.replace("KQkq", "kq") }], "boneyland", explain, "boneyland", 1).positionCheck, "mismatch");
   });
+  test("With no preceding moves the returned FEN must equal the request root (first-move capture, GPT round 4)", () => {
+    const [root, after, san] = F.UNDERPROMOTION;
+    const req = makeRequest("explain", root, "", { played: san, position: after });
+    const reply = (fen) => bg.normalized([{ ...F.boneylandSuccess, fen }], "boneyland", req, "boneyland", 1).positionCheck;
+    assert.equal(reply(root), "ok");
+    assert.equal(reply(root.replace("4k2r", "4k2b")), "mismatch", "a bishop on h8 instead of the rook");
+    assert.equal(reply(root.replace(" w - - ", " w k - ")), "mismatch", "other castling rights");
+    const board = makeRequest("best", F.E4_EP, "", { position: F.E4_EP });
+    const best = (fen) => bg.normalized([{ ...F.boneylandSuccess, fen }], "boneyland", board, "boneyland", 1).positionCheck;
+    assert.equal(best(F.E4_EP), "ok");
+    assert.equal(best(F.E4_EP.replace(" e3 ", " - ")), "mismatch", "the first four fields must match the board fallback FEN");
+  });
   test("Token redaction also catches paragraph, cross-field and invisible-character splits", () => {
     const token = "hf_SavedToken1234567890";
     const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
@@ -349,9 +390,17 @@ function runUnits(test) {
       assert(!leaked(r), JSON.stringify(analysis));
       assert.match(r.analysis, /\[(?:token removed|redacted)\]/);
     }
+    // Fable round 4: list markers the renderer removes, and an echo without the hf_ prefix.
+    for (const analysis of ["1. hf_Sav\n2. edTok\n3. en123\n4. 4567890", "7) hf_Saved\n8) Token12\n9) 34567890",
+      "Your key body is SavedToken1234567890.", "Part of it: oken1234 only.", "## hf_Saved\nNOTE: Token1234567890"]) {
+      const r = run(analysis);
+      assert.equal(r.analysis, "[redacted]", JSON.stringify(analysis));
+    }
     const cross = run("The best move is Be7. hf_Saved", "Token1234567890: White is better");
     assert(!leaked(cross));
-    assert.equal(cross.analysis, "[redacted]");
+    assert.equal(cross.evaluationText, "[redacted]", "the field holding 8+ characters of the body");
+    const short = run("Be7. hf_Save is a typo.", "White is better");
+    assert.equal(short.analysis, "Be7. hf_Save is a typo.", "fewer than 8 characters of the body is not a leak");
     assert.equal(bg.normalized([{ ...F.boneylandSuccess, analysis: "Fine hf_ prose about the h-file and more words." }],
       "boneyland", req, "boneyland", 1, token).analysis, "Fine hf_ prose about the h-file and more words.");
   });

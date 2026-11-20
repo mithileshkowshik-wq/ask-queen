@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const { makeRequest, read, vm } = require("./unit");
 const F = require("./fixtures");
+const bg = require("../background.js");
 const { webcrypto } = require("node:crypto");
 
 const scripts = { chess: read("content/chess.js"), background: read("background.js") };
@@ -50,7 +51,7 @@ function worker(plan, settings = {}, givePermission = false) {
   const storage = { setAccessLevel: async (level) => accesses.push(level.accessLevel),
     get: async () => ({ ...settings }), set: async (value) => Object.assign(settings, value) };
   const chrome = { runtime, storage: { local: storage, onChanged: event() }, action: { onClicked: event() },
-    commands: { onCommand: event() }, tabs: { sendMessage: async (id, msg) => { tabMessages.push([id, msg]); } },
+    commands: { onCommand: event(), getAll: async () => [{ name: "_execute_action", shortcut: "" }, { name: "open-panel", shortcut: "Alt+Q" }] }, tabs: { sendMessage: async (id, msg) => { tabMessages.push([id, msg]); } },
     permissions: { contains: async ({ origins }) => { grants.push(...origins); return givePermission; } } };
   const sender = { id: runtime.id, frameId: 0, url: "https://lichess.org/analysis", tab: { id: 1 } };
   const h = vm.createContext({ ...clock.globals, chrome, AbortController, TextDecoder, Uint8Array, crypto: webcrypto,
@@ -113,7 +114,7 @@ function runWorkerTests(test) {
     assert.deepEqual(w.accesses, ["TRUSTED_CONTEXTS", "TRUSTED_CONTEXTS"]);
     await w.message({ type: "setPrefs", prefs: { firstUseSeen: true, dock: "left", token: "hf_other" } });
     assert.equal(settings.token, "hf_demoToken");
-    assert.deepEqual(JSON.parse(JSON.stringify(await w.message({ type: "getPrefs" }))), { firstUseSeen: true, dock: "left" });
+    assert.deepEqual(JSON.parse(JSON.stringify(await w.message({ type: "getPrefs" }))), { firstUseSeen: true, dock: "left", shortcut: "Alt+Q" });
   });
   test("Worker strips check and annotation marks before sending SAN to the Space", async () => {
     const w = worker(normal);
@@ -181,6 +182,35 @@ function runWorkerTests(test) {
     await w.clock.advance(2000);
     assert(retry.last.result);
     assert.equal(posts, 2);
+  });
+  test("Worker 'Try the other server' after a bad_response avoids the server that just failed", async () => {
+    let phase = 0;
+    const w = worker((r) => {
+      const bony = r.url.includes("boneyland");
+      if (phase === 0 && bony) return new Response("<html>asleep</html>", { status: 503 });
+      if (phase === 1 && bony && r.init.method !== "POST") return new Response(wire("complete", [{}]), { headers: { "content-type": "text/event-stream" } });
+      return normal(r);
+    });
+    const first = w.open(best);
+    await w.clock.advance(0);
+    assert.equal(first.last.result.server, "hugging-apps", "an earlier answer came from the backup");
+    phase = 1;
+    const second = w.open(makeRequest("best", F.START, ""));
+    await w.clock.advance(2000);
+    assert.equal(second.last.error.code, "bad_response");
+    assert.equal(second.last.error.server, "boneyland");
+    phase = 2;
+    const before = w.output.length;
+    const other = w.open({ ...makeRequest("best", F.START, ""), fresh: true, prefer: "other" });
+    await w.clock.advance(2000);
+    assert(w.output[before].url.includes("hugging-apps"), "the other server is asked first");
+    assert.equal(other.last.result.server, "hugging-apps");
+  });
+  test("Worker caps Retry-After at the panel's 600 s for both header forms", async () => {
+    assert.equal(bg.retryAfter("601"), 600);
+    assert.equal(bg.retryAfter("90000"), 600);
+    assert.equal(bg.retryAfter("45"), 45);
+    assert.equal(bg.retryAfter(new Date(Date.now() + 3600e3).toUTCString()), 600);
   });
   test("Worker validates the sender and disallows non-top-frame or invalid ask messages", async () => {
     const w = worker(normal);

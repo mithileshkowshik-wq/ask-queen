@@ -36,15 +36,29 @@
           const name = el.dataset.gameVariant || el.textContent.trim();
           return visible(el) && !/^(?:standard|standard chess|chess|rapid|blitz|bullet|daily)$/i.test(name);
         })) return { page, gate: "variant" };
+    // A running clock is checked before any route, so a live board kept on screen across an SPA move to /analysis
+    // stays closed.
+    if ([...document.querySelectorAll(".clock-component.clock-player-turn, .clock-running")].some(visible)) return { page, gate: "in_progress" };
+    if (nonStandardStart(pgn)) return { page, gate: "variant" };
     if (analysis && !game && !review) return { page, gate: null };
     if (!game) return { page, gate: "unknown_context" };
-    if ([...document.querySelectorAll(".clock-component.clock-player-turn, .clock-running")].some(visible)) return { page, gate: "in_progress" };
     const layout = ".board-layout-main, .board-layout-chessboard";
     const finished = [...document.querySelectorAll(`:is(${layout}) :is(.game-over-modal, .game-over-header, .game-over-modal-content)`)].some(visible) ||
       [...document.querySelectorAll(`:is(${MOVE_LIST}) :is(.game-result, [data-game-result])`)]
         .some((el) => visible(el) && RESULT.test(el.dataset.gameResult || el.textContent)) ||
       RESULT.test(AQ.tag(pgn, "Result") || "");
     return { page, gate: finished ? null : "in_progress" };
+  }
+
+  // Chess960 off /variants/ (Fable round 4): on a game page whose move list starts at White's move 1 with no custom-start
+  // sign, a first move that can't be played from the standard start means the game didn't start there. Layout-free.
+  function nonStandardStart(pgn) {
+    if (!/\/game\//i.test(location.pathname) || /\[\s*(?:FEN|SetUp)\b/i.test(pgn) || new URLSearchParams(location.search).has("fen"))
+      return false;
+    const node = document.querySelector(LIST), row = node?.closest("[data-whole-move-number]");
+    if (!node || node.matches(".black-move") || (row && row.dataset.wholeMoveNumber !== "1")) return false;
+    const first = san(node);
+    return !!first && !C.replay(C.START_FEN, [first]);
   }
 
   function san(el) {
@@ -115,7 +129,7 @@
     host: "www.chess.com",
     board: BOARD,
     matches: () => location.hostname === "www.chess.com" && AQ.hasBoard(BOARD),
-    gate: () => scope(AQ.shown, pgnText()).gate,
+    gate: (visible = AQ.shown) => scope(visible, pgnText()).gate,
     read() {
       const el = AQ.mainBoard(BOARD, ".board-layout-main, .board-layout-chessboard, [data-main-board]");
       if (!el) return null;

@@ -3,7 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-const E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
+// No en passant square after 1.e4: no black pawn can take on e3 (the board fallback writes it only when legal).
+const E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
+// Here Black's d4 pawn can take on e3, so the board fallback keeps the square.
+const E4_EP = "rnbqkbnr/ppp1pppp/8/8/3pP3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
 // No en passant square: no white pawn can take on e6 (python-chess and lichess write it only when legal).
 const E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
 const NC6 = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
@@ -156,6 +159,12 @@ for (const site of ["lichess", "chesscom"]) {
   add("final", { fen: ITALIAN, moves: OPENING, selected: 4, expect: fromStart(OPENING, ITALIAN) });
   add("flipped", { fen: E5, moves: OPENING, selected: 1, boardOptions: { flipped: true }, highlight: [["e7"], ["e5"]],
     expect: fromStart(OPENING.slice(0, 2), E5) });
+  add("board-ep", { fen: E4_EP, highlight: [["e2"], ["e4"]], customTree: li ? '<div class="tview2"><move class="active"></move></div>' : "",
+    expect: current(E4_EP, { sideSource: "lastmove" }) });
+  // The same push with the capturing pawn pinned to its king (rook a4 → king h4 along the rank): no square.
+  add("board-ep-pinned", { fen: "8/8/8/8/R2pP2k/8/8/4K3 b - e3 0 1", highlight: [["e2"], ["e4"]],
+    customTree: li ? '<div class="tview2"><move class="active"></move></div>' : "",
+    expect: current("8/8/8/8/R2pP2k/8/8/4K3 b - - 0 1", { sideSource: "lastmove" }) });
   add("board-side", { fen: E4, highlight: [["e2"], ["e4"]], customTree: li ? '<div class="tview2"><move class="active"><san>e4</san></move></div>' : "",
     expect: current(E4, { sideSource: "lastmove" }) });
   add("board-unknown", { fen: NC6, customTree: li ? '<div class="tview2"><move class="active"></move></div>' : "",
@@ -252,6 +261,13 @@ fixture("lichess-frompos-analysis", { url: "/abcdefgh", fen: NF3_PLACEMENT + " b
   rootClass: "analyse variant-fromPosition", customTree: lilaResult(lilaTree(["e4", "e5", "Nf3"], 2)),
   extra: underboard(NF3_PLACEMENT + " b Kk - 1 2", `[SetUp "1"]\n[FEN "${KK_ROOT}"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0`),
   expect: send(KK_ROOT, "e4 e5", "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w Kk - 0 2", { explain: "2.Nf3" }) });
+// A study chapter from a tagged position whose PGN export is on the page: Explain the third ply with its root and the
+// two moves before it (GPT round 4).
+const STUDY_ROOT = "r3k3/8/8/8/8/8/3P4/4K3 w q - 0 30";
+fixture("lichess-study-tagged", { url: "/study/abcdEF12/abcdEF90", fen: "2kr4/8/8/3P4/8/8/8/4K3 b - - 0 31",
+  highlight: [["d4"], ["d5"]], rootClass: "analyse variant-fromPosition", customTree: lilaTree(["d4", "O-O-O", "d5"], 2, { start: 30 }),
+  extra: underboard("2kr4/8/8/3P4/8/8/8/4K3 b - - 0 31", `[Event "Endgame study"]\n[SetUp "1"]\n[FEN "${STUDY_ROOT}"]\n\n30. d4 O-O-O 31. d5 *`),
+  expect: send(STUDY_ROOT, "d4 O-O-O", "2kr4/8/8/8/3P4/8/8/4K3 w - - 1 31", { explain: "31.d5", exact: "2kr4/8/8/3P4/8/8/8/4K3 b - - 0 31" }) });
 fixture("lichess-study-960", { url: "/study/abcdEF12/abcdEF56", fen: START, rootClass: "analyse variant-chess960",
   customTree: lilaTree(["e4"], 0), expect: blocked("variant") });
 fixture("lichess-study-crazyhouse", { url: "/study/abcdEF12/abcdEF78", fen: START, rootClass: "analyse variant-crazyhouse",
@@ -261,7 +277,7 @@ fixture("lichess-inline-custom", { fen: ITALIAN, highlight: [["f1"], ["c4"]], ro
   customTree: lilaTree(["Bc4"], 0, { inline: true, start: 3 }), expect: current(ITALIAN.replace("3 3", "0 1"), { sideSource: "lastmove" }) });
 fixture("lichess-column-black-first", { fen: "rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2", highlight: [["e7"], ["e5"]],
   rootClass: "analyse variant-standard", customTree: lilaTree(["e5"], 0, { blackFirst: true }),
-  expect: current("rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq e6 0 1", { sideSource: "lastmove" }) });
+  expect: current("rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", { sideSource: "lastmove" }) });
 fixture("lichess-custom-start", { fen: CUSTOM_CLOCKS, moves: ["Kd7"], selected: -1,
   extra: `<div class="copyables"><input value="${CUSTOM_CLOCKS}"></div>`,
   expect: current(CUSTOM_CLOCKS, { sideSource: "fen" }) });
@@ -332,6 +348,20 @@ for (const [id, url, list, extra] of [
   ["live-tab-review-sidebar", "/game/live/4815162342?tab=review", LIVE, '<div class="board-layout-sidebar"><div class="game-result">1-0</div></div>'],
   ["live-clock-and-result", "/analysis/game/live/4815162342?tab=review", inList(LIVE, '<div class="game-result">1-0</div>'), ""],
 ]) fixture("chesscom-" + id, { url, fen: E5, customTree: list, finished: false, highlight: [["e7"], ["e5"]], extra, expect: blocked("in_progress") });
+// GPT round 4: an SPA move to /analysis that leaves the live board and its running clock on screen.
+fixture("chesscom-spa-analysis-live", { url: "/analysis", fen: E5, customTree: LIVE, finished: false, highlight: [["e7"], ["e5"]],
+  expect: blocked("in_progress") });
+// Chess960 on an ordinary game page: the first move can't be played from the standard start (Fable round 4).
+fixture("chesscom-960-game", { url: "/game/live/123456789", fen: "nrbkqbrn/pppppppp/8/8/8/1N6/PPPPPPPP/R1BKQBRN b - - 1 1",
+  moves: ["Nb3"], selected: 0, highlight: [["a1"], ["b3"]], expect: blocked("variant") });
+// The list (…Nc6 3.Bc4) passes the quick checks but the board has the knight on f6: only the full replay catches it,
+// so the list is dropped and only the board goes out.
+fixture("chesscom-replay-catches", { url: "/analysis", fen: "rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+  moves: OPENING, selected: 4, highlight: [["f1"], ["c4"]],
+  expect: current("rnbqkb1r/pppp1ppp/5n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 0 1", { disagree: true, sideSource: "lastmove" }) });
+// A finished-game marker hidden by CSS (display:none) is not evidence: the launcher stays hidden.
+fixture("chesscom-css-hidden-result", { url: "/game/live/123456789", fen: E5, finished: false,
+  customTree: inList(review(OPENING, 1), '<div class="game-result" style="display:none">1-0</div>'), expect: blocked("in_progress") });
 // Strict SAN after trimming: a space inside one text node is not repaired, so the list is dropped for the board.
 fixture("chesscom-inner-space", { url: "/analysis", fen: E4, highlight: [["e2"], ["e4"]],
   customTree: '<wc-simple-move-list><div class="node white-move" data-node="0-0"><span class="node-highlight-content selected">e 4</span></div></wc-simple-move-list>',
@@ -397,6 +427,6 @@ const XSS = [
   hugging[0], '<script>window.aqExecuted=1</script>',
 ];
 
-module.exports = { SITES, REPLY_FENS, positionKey, START, E4, E5, NC6, ITALIAN, OPENING, MATE, FEN_MISMATCH,
+module.exports = { SITES, REPLY_FENS, positionKey, START, E4, E4_EP, E5, NC6, ITALIAN, OPENING, MATE, FEN_MISMATCH,
   WHITE_CASTLE, BLACK_CASTLE, EN_PASSANT, PROMOTION, UNDERPROMOTION, RECORDED_FEN, RECORDED_MOVES, expand, sse, hugging,
   truncated, boneyland, boneylandSuccess, XSS };

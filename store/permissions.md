@@ -36,7 +36,7 @@ The extension's single purpose is to explain the chess position the user is view
 ## Remote code
 
 ```
-No. All JavaScript is in the package. The extension does not load or evaluate remote code, and uses no eval or new Function. Text returned by the QUEEN servers is treated as untrusted data: it is HTML-escaped before a small Markdown subset is applied, and any HTML it contains is discarded.
+No. All JavaScript is in the package. The extension does not load or evaluate remote code, and uses no eval or new Function. Text returned by the QUEEN servers is treated as untrusted data: the panel never parses it as HTML. It builds a small Markdown subset (paragraphs, lists, headings, bold, italic, code) as page elements and inserts the text itself only as text nodes, so nothing a server sends can become markup or script.
 ```
 
 ## Permissions not requested

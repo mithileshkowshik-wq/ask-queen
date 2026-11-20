@@ -401,7 +401,50 @@ async function runBrowser(extension, temp, out, test, packaged) {
           await chrome.tabs.sendMessage(tab.id, { type: "openPanel" });
         });
         await ui("panel").waitFor();
-        assert.match(await ui("shortcut").textContent(), /Alt\+Q/);
+        // The real binding from getPrefs, in the platform's notation (⌥Q on macOS).
+        assert.match(await ui("shortcut").textContent(), process.platform === "darwin" ? /⌥Q/ : /Alt\+Q/);
+      });
+    });
+
+    await test("Browser staggered SPA move to /analysis that keeps the live board and running clock stays gated", async () => {
+      const { since } = await setup();
+      await withPage("chesscom-in-progress", async (page, ui) => {
+        await sleep(1500);
+        assert.equal(await ui("launcher").isVisible(), false);
+        // Step 1: only the route changes; the live board and its clock stay mounted.
+        await page.evaluate(() => history.pushState({}, "", "/analysis"));
+        await sleep(2500);
+        assert.equal(await ui("launcher").isVisible(), false, "route changed, live board kept");
+        // Step 2: a click (which marks the gate for a recompute) still finds the running clock.
+        await page.mouse.click(5, 5);
+        await sleep(1500);
+        assert.equal(await ui("launcher").isVisible(), false, "after a click");
+        assert.equal(posts(since).length, 0);
+      });
+    });
+
+    await test("Browser closed launcher ticks make no layout reads, also across a URL change", async () => {
+      await setup();
+      await withPage("chesscom-analysis", async (page, ui) => {
+        await ui("launcher").waitFor();
+        await isolated(page, () => {
+          globalThis.aqLayoutReads = 0;
+          for (const name of ["getBoundingClientRect", "getClientRects"]) {
+            const original = Element.prototype[name];
+            Element.prototype[name] = function (...args) { globalThis.aqLayoutReads++; return original.apply(this, args); };
+          }
+          for (const name of ["offsetWidth", "offsetHeight", "clientWidth", "clientHeight"]) {
+            const owner = name.startsWith("offset") ? HTMLElement.prototype : Element.prototype;
+            const desc = Object.getOwnPropertyDescriptor(owner, name);
+            Object.defineProperty(owner, name, { ...desc, get() { globalThis.aqLayoutReads++; return desc.get.call(this); } });
+          }
+          return true;
+        });
+        await sleep(2500); // quiet ticks
+        await page.evaluate(() => history.pushState({}, "", "/analysis?tab=analysis"));
+        await sleep(2500); // the gate recomputes and the launcher is confirmed
+        assert(await ui("launcher").isVisible());
+        assert.equal(await isolated(page, () => globalThis.aqLayoutReads), 0);
       });
     });
 
@@ -566,7 +609,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await ui("best").click();
         await output(ui, "result");
         const text = await page.evaluate((host) => document.querySelector(host).shadowRoot.textContent, selectors.host);
-        assert.match(text, /\[token removed\]/);
+        assert.match(text, /\[(?:token removed|redacted)\]/);
         assert(!text.replace(/[*_\x60~\s]/g, "").includes(token.slice(3)), "token reassembled in the panel");
       });
     });
@@ -741,7 +784,9 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await page.keyboard.press("Enter");
         await output(ui, "result");
         assert.deepEqual(await layoutProblems(page, selectors.host), [], "result at 200%");
-        await shot(page, "zoom200-result");
+        // Captured through CDP at the emulated size, so the image shows the 200% layout.
+        assert.equal(await page.evaluate(() => innerWidth), 640);
+        fs.writeFileSync(path.join(out, "zoom200-result.png"), Buffer.from((await cdp.send("Page.captureScreenshot")).data, "base64"));
         await cdp.detach();
       });
       const page = await ctx.newPage();
@@ -751,7 +796,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
         assert.deepEqual(await layoutProblems(page, null), [], "options at 200%");
         await page.keyboard.press("Tab");
         assert.notEqual(await page.evaluate(() => document.activeElement?.localName), "body", "keyboard focus enters the options page");
-        await page.screenshot({ path: path.join(out, "zoom200-options.png"), fullPage: true });
+        assert.equal(await page.evaluate(() => innerWidth), 640);
+        fs.writeFileSync(path.join(out, "zoom200-options.png"), Buffer.from((await cdp.send("Page.captureScreenshot")).data, "base64"));
         await cdp.detach();
       } finally { await page.close(); }
     });

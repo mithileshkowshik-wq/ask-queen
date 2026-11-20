@@ -198,6 +198,22 @@
   const kingOf = (map, side) => Object.keys(map).find((sq) => map[sq] === colored("K", side));
   const safe = (map, side) => !attacked(map, kingOf(map, side), opposite(side));
 
+  // Can `side` (to move) legally take en passant on `square` (rank 3 or 6) in `map`? The pushed pawn sits just past
+  // the square; an own pawn beside it may take only if its king is not left in check.
+  function enPassant(map, side, square) {
+    if (!/^[a-h][36]$/.test(square || "") || !map) return false;
+    const pushed = square[0] + (square[1] === "3" ? "4" : "5"), x = FILES.indexOf(square[0]);
+    if (map[pushed] !== colored("P", opposite(side)) || map[square] || !kingOf(map, side)) return false;
+    return [-1, 1].some((dx) => {
+      const sq = FILES[x + dx] && FILES[x + dx] + pushed[1];
+      if (!sq || map[sq] !== colored("P", side)) return false;
+      const after = { ...map, [square]: map[sq] };
+      delete after[sq];
+      delete after[pushed];
+      return safe(after, side);
+    });
+  }
+
   // Full SAN replay from a root FEN to a six-field FEN, or null if any move is not legal there. SAN disambiguation
   // is resolved by legality (the mover's king may not be left in check); castling needs the right, empty squares and
   // no attacked king squares. Rights drop on king and rook moves and on rook captures; en passant is written only
@@ -237,19 +253,8 @@
       }
       for (const [sq, rights] of [["e1", "KQ"], ["e8", "kq"], ["a1", "Q"], ["h1", "K"], ["a8", "q"], ["h8", "k"]])
         if (from === sq || m.to === sq) castle = castle.replace(new RegExp(`[${rights}]`, "g"), "");
-      ep = "-";
-      if (m.piece === "P" && Math.abs(m.to[1] - from[1]) === 2) {
-        const square = m.to[0] + (side === "w" ? "3" : "6");
-        const capture = [-1, 1].map((dx) => FILES[FILES.indexOf(m.to[0]) + dx] && FILES[FILES.indexOf(m.to[0]) + dx] + m.to[1])
-          .some((sq) => {
-            if (!sq || next[sq] !== colored("P", them)) return false;
-            const after = { ...next, [square]: next[sq] };
-            delete after[sq];
-            delete after[m.to];
-            return safe(after, them);
-          });
-        if (capture) ep = square;
-      }
+      ep = m.piece === "P" && Math.abs(m.to[1] - from[1]) === 2 && enPassant(next, them, m.to[0] + (side === "w" ? "3" : "6"))
+        ? m.to[0] + (side === "w" ? "3" : "6") : "-";
       half = m.piece === "P" || m.capture ? 0 : half + 1;
       if (side === "b") full++;
       map = next;
@@ -266,5 +271,5 @@
   }
 
   globalThis.AQChess = { START_FEN, parseFen, placementToString, isStrictSan, stripSan, sameMove,
-    isPlausibleBoard, preSendCheck, verifyBest, verifyExplain, sanMatchesUci, moveLabel, replay };
+    isPlausibleBoard, preSendCheck, verifyBest, verifyExplain, sanMatchesUci, moveLabel, replay, enPassant };
 })();

@@ -48,7 +48,9 @@
   :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
   [role="status"] { color: var(--dim); font-size: 13.5px; }
   [role="alert"] { color: var(--amber); font-size: 13.5px; }
-  [role="status"]:empty, [role="alert"]:empty { display: none; }
+  /* Empty live regions stay rendered, so they are in the accessibility tree before their first message.
+     The negative margin only cancels the grid gap an empty row would add. */
+  form > [role]:empty, section > [role]:empty { margin-top: -14px; }
   footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
   footer p + p { margin-top: 6px; }
   @media (forced-colors: active) {
@@ -66,11 +68,11 @@
   <section aria-labelledby="token-h">
     <h2 id="token-h">Hugging Face token <small>(optional)</small></h2>
     <p class="help">
-      Queen runs on free community GPUs that answer only a few questions per visitor. A free Hugging Face token raises that limit.
+      QUEEN runs on free community GPUs that answer only a few questions per visitor. A free Hugging Face token raises that limit.
       <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">Create a token on Hugging Face (opens in a new tab)</a>.
     </p>
     <p class="warn" id="token-warn">
-      Your token is sent with every question to the Queen servers. They are run by community members, not by Hugging Face,
+      Your token is sent with every question to the QUEEN servers. They are run by community members, not by Hugging Face,
       Princeton or this extension's author, and the people who run them could read it. Use a read-only token made just for
       Ask Queen, with no access to your private models or data, and revoke it on Hugging Face when you no longer need it.
     </p>
@@ -111,7 +113,7 @@
   <section aria-labelledby="custom-h">
     <h2 id="custom-h">Custom server <small>(optional)</small></h2>
     <p class="help" id="custom-help">
-      If you run your own copy of a Queen Space on Hugging Face, Ask Queen can use it. Chrome will ask you to allow that one
+      If you run your own copy of a QUEEN Space on Hugging Face, Ask Queen can use it. Chrome will ask you to allow that one
       address, and nothing else.
     </p>
     <p class="saved" id="custom-saved" data-testid="opt-custom-saved">No custom server saved.</p>

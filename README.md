@@ -7,21 +7,24 @@ Princeton NLP) for its move and the reasoning behind it.
 
 Unofficial. Not affiliated with or endorsed by Chess.com, Lichess, Princeton NLP or Hugging Face.
 
+A note on names: QUEEN is the model, and the QUEEN servers are the community-run machines that host it. The panel
+calls the model Queen for short, so text quoted from the panel is spelled that way.
+
 ## What it does and doesn't do
 
 It does:
 
-- **Explain a move.** Click a move, then **Explain 14...Nf6**. Queen analyses the position *before* that move and says
-  what it would play. If that is the move you clicked, Queen agrees and explains it. If not, you get Queen's move and its
+- **Explain a move.** Click a move, then **Explain 14...Nf6**. QUEEN analyses the position *before* that move and says
+  what it would play. If that is the move you clicked, QUEEN agrees and explains it. If not, you get QUEEN's move and its
   reasons.
-- **Find Queen's move.** **Best move for White** asks what Queen would play in the position on the board.
+- **Find QUEEN's move.** **Best move for White** asks what QUEEN would play in the position on the board.
 - **Read the position for you**, including whose move it is. When it can't tell, it asks you: White or Black.
 
 It doesn't:
 
-- **Judge your move directly.** Queen explains only its own choice. When it prefers another move, the panel says so
+- **Judge your move directly.** QUEEN explains only its own choice. When it prefers another move, the panel says so
   plainly: "This explains Bd7. Queen can't judge Nf6 directly."
-- **Replace an engine.** Queen is a language model. Its explanations can be wrong, and the panel says so on every
+- **Replace an engine.** QUEEN is a language model. Its explanations can be wrong, and the panel says so on every
   screen. Check anything that matters with an engine.
 - **Work during a game**, on puzzles, or on Chess960 and other variants. See [Fair play](#fair-play).
 - **Run on your computer.** QUEEN needs a large GPU, so the extension uses free community servers. They can be slow,
@@ -44,7 +47,7 @@ It needs a recent version of Chrome. The exact minimum is `minimum_chrome_versio
 **chess.com.** Open a finished game in Game Review or Analysis and click a move in the move list.
 
 **lichess.org.** Open the analysis board, a study, or a finished game, and click a move. Variations work: the line you
-selected is the line Queen gets.
+selected is the line QUEEN gets.
 
 Then, on either site:
 
@@ -53,21 +56,24 @@ Then, on either site:
 3. Wait. An answer usually takes 15 to 60 seconds, and the free servers queue requests, so it can take longer. After
    two and a half minutes the extension gives up and tells you. **Cancel** stops it at any time.
 
-The answer shows, in order: the position Queen analysed, its move, any caveats, its evaluation and critical line when the
+The answer shows, in order: the position QUEEN analysed, its move, any caveats, its evaluation and critical line when the
 server supplied them, and its explanation. **Copy FEN** copies the analysed position. **Ask again** gets a fresh
 answer.
 
 Good to know while you use it:
 
-- **The panel follows the board.** Step to another move and the buttons change with it. An answer for the earlier
+- **The panel follows the board.** Step to another move and the buttons change with it. While a piece is still
+  moving, the panel says "Reading the board…" and the buttons are off for a moment. An answer for the earlier
   position is marked "The board has moved", with one button to ask about the new one.
-- **If the move list can't be used** (some custom positions, or a list that disagrees with the pieces), Queen works
+- **If the move list can't be used** (some custom positions, or a list that disagrees with the pieces), QUEEN works
   from the pieces instead. The panel shows how it decided whose move it is, with a switch. Castling rights are then a
   guess, and the panel says so. Only Best move is offered, because Explain needs the move before the position.
 - **Move the panel** with the arrow in its header if it covers something. The side is remembered.
-- **Keyboard.** **Alt+Q** opens the panel wherever the Ask Queen button is showing, with focus on the main button.
-  The shortcut is shown in the panel's footer, and you can change it at `chrome://extensions/shortcuts`. Tab reaches
-  the launcher and everything in the panel, and Escape closes the panel when focus is in it.
+- **Keyboard.** **Alt+Q** (⌥Q on a Mac) opens the panel wherever the Ask Queen button is showing, with focus on the
+  main button. The panel's footer shows the key you actually have. Chrome can leave the key unbound, most often when
+  the extension was already installed before the shortcut was added: if nothing happens, or the footer shows no
+  key, set it at `chrome://extensions/shortcuts`. Tab reaches the launcher and everything in the panel, and Escape
+  closes the panel when focus is in it.
 
 ## Fair play
 
@@ -77,7 +83,7 @@ game, Game Review, an analysis board or a study. Otherwise it shows nothing:
 - **Games in progress** (live, daily and correspondence, whether you are playing or watching), including lichess
   analysis of a correspondence game that is still going.
 - **Puzzles**, solved or not.
-- **Chess960 and every other variant.** Queen only knows standard chess.
+- **Chess960 and every other variant.** QUEEN only knows standard chess.
 - **Pages it doesn't recognise.** If it can't establish that a game is over, it stays hidden.
 
 If you reach one of these with the panel open, the question in flight is cancelled, any answer is removed, and the
@@ -124,10 +130,10 @@ What to know about the token:
 |---|---|---|
 | No **Ask Queen** button | The page is a game in progress, a puzzle, a variant, or one the extension doesn't recognise. | Open the finished game, its review, or an analysis board. |
 | **Can't read this board** | The pieces don't make a legal position right now, often mid-animation. | Step to another move, or click **Read the board again**. |
-| "The move list and the board disagree…" | The moves don't lead to the position shown. | Nothing: Queen works from the pieces. Check the side to move. |
+| "The move list and the board disagree…" | The moves don't lead to the position shown. | Nothing: QUEEN works from the pieces. Check the side to move. |
 | "The board has moved, so nothing was sent." | The position moved between showing the button and your click. | Check the button's label and click again. |
 | **Queen didn't name a clear move** | The answer had no move the server could verify. | Read the explanation, or click **Ask again**. |
-| "The answer was cut off." | Queen ran out of room before finishing. | Click **Try the other server**. |
+| "The answer was cut off." | QUEEN ran out of room before finishing. | Click **Try the other server**. |
 | **Queen analysed a different position** | The answer didn't match the board you asked about, so it was discarded. | Click **Work from the pieces**, or **Ask again**. |
 | **The free quota is used up** | The free servers answer only a few questions per visitor. | Add a free Hugging Face token, or try again later. |
 | **Your token was rejected** | The server refused the saved token. | Replace or remove it in Settings. |
@@ -135,7 +141,7 @@ What to know about the token:
 | **Queen's server is waking up** | Free servers sleep when idle. | Wait a minute or two, then **Try again**. |
 | **Queen took too long** | No answer within the time limit. | **Try again**, ideally at a quieter time. |
 | **Queen's servers are busy** | Too many questions are queued. | Wait, then **Try again**. If the server says how long, the button counts down. |
-| **Another tab is already asking Queen** | Queen answers one question at a time per browser. | Wait for that answer, then **Try again**. |
+| **Another tab is already asking Queen** | QUEEN answers one question at a time per browser. | Wait for that answer, then **Try again**. |
 | **Both servers are unavailable** | Neither free server answered. | Try later, or set up a custom server. |
 | **Queen can't use this position** | The server rejected the moves or the position. | Click **Work from the pieces**, or check the side to move. |
 | **The game is over here** | The position is checkmate or stalemate. | Pick an earlier move. |
@@ -180,8 +186,8 @@ To build the zip for the Chrome Web Store:
 sh scripts/package.sh
 ```
 
-It writes `dist/ask-queen-<version>.zip` from an allowlist: the manifest, the scripts, the settings page, the icons
-and `LICENSE`. Tests, docs and `store/` are left out.
+It writes `dist/ask-queen-<version>.zip` from an allowlist: the manifest, the scripts, the settings page, the icons,
+`_locales/` and `LICENSE`. Tests, docs and `store/` are left out.
 
 The code is plain JavaScript with no build step and no runtime dependencies:
 
@@ -194,14 +200,14 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 
 ## Known limits
 
-- **The servers aren't ours.** Both are free community Spaces. They can be slow, out of quota, asleep, changed or gone,
+- **The servers aren't ours.** Both are free community servers (Hugging Face Spaces). They can be slow, out of quota, asleep, changed or gone,
   and nobody has promised otherwise.
-- **Queen explains its own move**, not an arbitrary one.
+- **QUEEN explains its own move**, not an arbitrary one.
 - **Answers can be wrong**, cut off, or missing a clear move. The panel labels each case.
 - **Standard chess only**, and never during a game.
 - **Working from the pieces is less exact.** Castling rights are guessed from where the kings and rooks stand, and the
-  move number isn't known, so Queen's moves are shown without one.
-- **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise Queen works
+  move number isn't known, so QUEEN's moves are shown without one.
+- **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise QUEEN works
   from the pieces.
 - **Site changes can break reading.** Both sites change their pages without notice. The extension checks the move list
   against the pieces and stops rather than guess, so the usual symptom is "Can't read this board", not a wrong answer.

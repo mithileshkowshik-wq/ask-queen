@@ -149,3 +149,33 @@ Done by Opus 5.5. Each entry gives the fix and the test that guards it; every na
   - `Live regions exist and are empty before any text is written into them`.
   - `Another tab's ask shows its own copy, not the busy-server copy`.
   - The escaping mutation test now targets the DOM renderer's single text sink.
+
+## Fix pass 4, logic (after round 4: GPT-6.2-sol 5.0, Fable 5.2 9.7)
+Done by Opus 5.5. Each entry gives the fix and its guarding test; every name is a test in `docs/review/evidence/round-dev/report.json`.
+
+- **GPT H1, board-fallback en passant** (`content/chess.js` `enPassant`, `content/common.js` `boardFromPieces`). A double push sets the square only when the side to move can legally take, using the same rule as the replay.
+  - The `E4` constant now has `-`. `board-ep` is a positive case where Black's d4 pawn can take; `board-ep-pinned` is the same push with the taker pinned, so no square.
+  - Guarded by: `Adapter/Panel/Browser fixture {lichess,chesscom}-board-side`, `…-board-ep`, `…-board-ep-pinned` (full outbound FEN), `Board hygiene rejects impossible boards and ignores ambiguous highlights`.
+- **GPT H6, a running clock checked before standalone /analysis** (`content/chesscom.js` `scope`).
+  - Guarded by: `Adapter/Panel/Browser fixture chesscom-spa-analysis-live`, `Browser staggered SPA move to /analysis that keeps the live board and running clock stays gated` (the route and the board change in separate steps; zero POSTs).
+- **GPT C8, no layout reads while closed** (`content/common.js` `AQ.confirm`, `AQ.styled`). The gate-open confirmation is evidence-only, using `checkVisibility()` style visibility on result, clock and badge elements. There is no board scan and no rect reads. A CSS-hidden finished marker keeps the launcher hidden.
+  - Guarded by: `Browser closed launcher ticks make no layout reads, also across a URL change` (counts getBoundingClientRect, getClientRects and offset/client sizes in the content-script world), `Adapter/Panel/Browser fixture chesscom-css-hidden-result`, `AQ.gate() is layout-free and agrees with readPosition() on every fixture` (rects throw; confirm closes the CSS-hidden case).
+- **GPT majors.**
+  - **Empty move list** (`background.js` `normalized`). The returned FEN is compared field by field with `req.fen`, as on a first-move Explain or the board fallback. Guarded by: `With no preceding moves the returned FEN must equal the request root (first-move capture, GPT round 4)`.
+  - **"Try the other server" after a failure.** The failing server becomes the tab's last server and is sent as `error.server`. Guarded by: `Worker 'Try the other server' after a bad_response avoids the server that just failed`.
+  - **Study with a tagged custom start.** Guarded by: `Adapter/Panel/Browser fixture lichess-study-tagged` (Explain 31.d5, root plus `d4 O-O-O`).
+  - **Retry-After cap.** One 600 s cap, applied in the background for both header forms. Guarded by: `Worker caps Retry-After at the panel's 600 s for both header forms`.
+- **Fable major 1, token** (`background.js` `guard`). The final check runs on the text as rendered, with line-leading list, heading and label markers stripped. It compares against the token body as well, and flags any 8 characters in a row of it.
+  - Guarded by: `Token redaction also catches paragraph, cross-field and invisible-character splits` (ordered-list and "7)" splits, an echo without the prefix, a heading or label split), and `Browser token echoed by a server never appears in the panel` (the mock now echoes as list items and as the body alone).
+- **Fable minors.**
+  - **lichess FEN-input lag.** One re-read 300 ms later, by nudging the panel's own host. Guarded by: `A lichess FEN input a step behind the board gets one re-read 300 ms later, not a loop`.
+  - **chess.com Chess960 off /variants/.** On a game page whose list starts at White's move 1 with no custom sign, a first move impossible from the standard start is gated as a variant, layout-free. Guarded by: `Adapter/Panel/Browser fixture chesscom-960-game`.
+  - **lichess evidence narrowed.** Only `.result-wrap .result` and `.analyse__moves .result` count, and `[Result]` only from `div.pgn`. Guarded by: the lichess fixtures.
+  - **Analysis capped at 20,000 characters.** Guarded by: `Very long provider prose is capped at 20,000 characters before it is parsed`.
+  - **Bare-number evaluations get no row.** Guarded by: `Both recorded API shapes normalize …`.
+  - **`getPrefs` returns the real `shortcut`.** Guarded by: `Worker protects local storage on startup and install and limits prefs writes`.
+- **Regression tests.**
+  - The content-side replay: `chesscom-replay-catches` (list `e4 e5 Nf3 Nc6 Bc4` against a board with the knight on f6, so disagree and only the board goes out).
+  - `A board-fallback answer has no move numbers in its headline (clocks are unknown)`.
+  - The zoom200 screenshots come from CDP `Page.captureScreenshot`, with `innerWidth` asserted to be 640.
+  - `docs/perf.md` now names Chromium 158 and Playwright 1.65.0, and describes the evidence-only confirm.

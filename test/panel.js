@@ -194,6 +194,17 @@ function runPanelTests(test) {
       assert(region.contains(s.element("headline")));
     } finally { await s.close(); }
   });
+  test("A board-fallback answer has no move numbers in its headline (clocks are unknown)", async () => {
+    const s = await panelFixture("lichess-board-side");
+    try {
+      await s.open();
+      s.click("best");
+      s.events.message({ result: { ...result, fen: F.E4, best: { san: "e5", uci: "e7e5", source: "structured" },
+        criticalLine: "1...e5 2.Nf3" } });
+      assert.match(s.element("headline").textContent, /\be5\b/);
+      assert.doesNotMatch(s.element("headline").textContent, /\d+\.(?:\.\.)?e5/);
+    } finally { await s.close(); }
+  });
   test("Another tab's ask shows its own copy, not the busy-server copy", async () => {
     const s = await panelFixture("lichess-analysis");
     try {

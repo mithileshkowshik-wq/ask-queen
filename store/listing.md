@@ -25,8 +25,8 @@ Game Review says a move was a mistake. Ask Queen tells you what the QUEEN chess 
 After a game on chess.com or lichess, click a move, then click Ask Queen. The extension reads the position from the page, works out whose move it is, and asks QUEEN, a chess language model from Princeton NLP, for its move and its reasoning in plain English.
 
 WHAT YOU CAN ASK
-• Explain a move. Queen analyses the position before the move you clicked. If it would play the same move, it explains why. If not, it shows its own move and the reasons for it.
-• Ask what Queen would play next in the position on the board.
+• Explain a move. QUEEN analyses the position before the move you clicked. If it would play the same move, it explains why. If not, it shows its own move and the reasons for it.
+• Ask what QUEEN would play next in the position on the board.
 
 WHERE IT WORKS
 • chess.com: Game Review and Analysis.
@@ -37,8 +37,8 @@ FAIR PLAY
 Ask Queen is for games that are over. It does not appear during games in progress (live, daily or correspondence, playing or watching) or on puzzles. It can't stop someone copying a position into another analysis tool by hand; using outside help during a game is against both sites' rules, and that is on the player.
 
 LIMITS, STATED PLAINLY
-• Answers can be wrong. Queen is a language model, not an engine. Check anything important with an engine.
-• Queen explains its own move. It can't judge an arbitrary move, so when it disagrees with the move played, the explanation is for Queen's move.
+• Answers can be wrong. QUEEN is a language model, not an engine. Check anything important with an engine.
+• QUEEN explains its own move. It can't judge an arbitrary move, so when it disagrees with the move played, the explanation is for QUEEN's move.
 • The servers are free and run by volunteers. They can be slow (15 to 60 seconds is normal), out of quota, or unavailable. A free Hugging Face token raises the quota, and Settings explains how.
 • Standard chess only. No Chess960 or other variants.
 • Off during games.
@@ -66,8 +66,8 @@ Shown in the description above, in Settings, in the README and in `LICENSE`:
 Suggested screenshots, in this order (up to five):
 
 1. The ask view with a move selected, showing both ask buttons.
-2. A result where Queen agrees with the move played.
-3. A result where Queen prefers another move, showing "Queen can't judge … directly".
+2. A result where QUEEN agrees with the move played.
+3. A result where QUEEN prefers another move, showing "Queen can't judge … directly".
 4. Working from the pieces, with the White and Black buttons.
 5. The first-use notice naming the servers.
 
@@ -81,5 +81,5 @@ Suggested screenshots, in this order (up to five):
 
 - Don't present the extension as endorsed by anyone, and don't rank it against other tools.
 - Don't use the Chess.com, Lichess, Princeton or Hugging Face logos, and keep the non-affiliation line.
-- Keep the five limits: the free servers can be slow or unavailable, Queen explains its own move, answers can be wrong,
+- Keep the five limits: the free servers can be slow or unavailable, QUEEN explains its own move, answers can be wrong,
   standard chess only, off during games.

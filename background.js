@@ -100,12 +100,18 @@ function scrub(value, token) {
     return s.replace(new RegExp(`h${GAP}f${GAP}_(?:${GAP}[A-Za-z0-9]){8,}`, "g"), "[token removed]");
   });
 }
-// Last line of defence: the displayed fields, alone and joined, with everything but letters and digits removed, must
-// not spell the saved token (or a long hf_ run). A field that does is replaced; a split across fields clears them all.
+// Last line of defence, on the text as the panel will show it: the line-leading list, heading and label markers that
+// its Markdown renderer consumes are dropped, then only letters and digits are kept. No displayed field, and not the
+// fields joined, may contain the token, its body without "hf_", or any 8 characters in a row of that body (nor a long
+// hf_ run). A field that does is replaced; a split across fields clears them all.
 const SHOWN = ["analysis", "evaluationText", "criticalLine"];
+const MARKER = /^\s*(?:#{1,6}\s+|(?:\d+[.)]|[-*+])\s+|(?:\*\*)?[A-Z][A-Z_ ]{2,24}:(?:\*\*)?\s*)/;
 function guard(result, token) {
-  const alnum = (s) => (s || "").replace(/[^A-Za-z0-9]/g, "");
-  const leaks = (s) => (!!token && alnum(s).includes(alnum(token))) || /hf_[A-Za-z0-9]{24,}/.test((s || "").replace(/[\s*`~]/g, ""));
+  const rendered = (s) => (s || "").split("\n").map((line) => line.replace(MARKER, "")).join("\n");
+  const alnum = (s) => rendered(s).replace(/[^A-Za-z0-9]/g, "");
+  const body = token ? alnum(token.replace(/^hf_/, "")) : "";
+  const runs = body.length >= 8 ? Array.from({ length: body.length - 7 }, (_, i) => body.slice(i, i + 8)) : [];
+  const leaks = (s) => runs.some((run) => alnum(s).includes(run)) || /hf_[A-Za-z0-9]{24,}/.test(rendered(s).replace(/[\s*`~]/g, ""));
   if (!leaks(SHOWN.map((key) => result[key]).join("\n"))) return result;
   const one = SHOWN.some((key) => leaks(result[key]));
   return { ...result, ...Object.fromEntries(SHOWN.filter((key) => result[key] != null && (!one || leaks(result[key])))
@@ -122,6 +128,7 @@ function proseMove(text) {
   return null;
 }
 
+const ANALYSIS_CAP = 20000; // characters of provider prose kept; the recordings are under 4,000
 function normalized(out, api, req, server, seconds, token) {
   out = invisible(out); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
   const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
@@ -131,7 +138,7 @@ function normalized(out, api, req, server, seconds, token) {
   if (!raw || typeof raw.analysis !== "string" || !pos ||
       (raw.best_move_san !== null && typeof raw.best_move_san !== "string") ||
       !(ev == null || typeof ev === "string" || Number.isFinite(ev))) throw failure("bad_response");
-  const analysis = plainAnalysis(raw.analysis, pos.side);
+  const analysis = plainAnalysis(raw.analysis.slice(0, ANALYSIS_CAP), pos.side);
   // Only this provider's own legality-checked step may confirm a prose move (§4.5).
   const lineUci = api === "boneyland" ? (Array.isArray(raw.critical_line_uci) ? raw.critical_line_uci[0] : undefined)
     : raw.critical_line && typeof raw.critical_line === "object" ? raw.critical_line.legal_steps?.[0]?.uci : undefined;
@@ -147,16 +154,12 @@ function normalized(out, api, req, server, seconds, token) {
 
   // The model's EVALUATION sentence: boneyland's evaluation field, else (hugging-apps) the EVALUATION line of the
   // prose. After player/opponent → White/Black it must name a side; an "equal" sentence is shown as equal for both,
-  // anything else is dropped. A bare number (no recording has one) is read as relative to the side to move.
+  // anything else is dropped. A bare number has no known sign convention (no recording has one), so it gets no row.
   const sentence = typeof ev === "string" ? ev : ev == null ? /^EVALUATION:[ \t]*(.+)$/m.exec(raw.analysis)?.[1] : null;
   const said = sentence ? plainAnalysis(sentence, pos.side) : "";
   const evaluation = Number.isFinite(ev) ? ev : null;
-  const advantaged = (evaluation >= 0) === (pos.side === "w") ? "White" : "Black";
-  const value = (advantaged === "White" ? 1 : -1) * Math.abs(evaluation);
-  const evaluationText = said ? (/\b(?:White|Black)\b/.test(said) ? said :
-      /\b(?:equal|balanced|level|even)\b/i.test(said) ? "Equal for White and Black: " + said : null) :
-    evaluation === null ? null : evaluation === 0 ? "White and Black are even (≈ 0)" :
-    `${advantaged} is ${Math.abs(value) < 1 ? "slightly better" : "better"} (≈ ${value < 0 ? "−" : "+"}${Math.abs(value)})`;
+  const evaluationText = !said ? null : /\b(?:White|Black)\b/.test(said) ? said :
+    /\b(?:equal|balanced|level|even)\b/i.test(said) ? "Equal for White and Black: " + said : null;
   const suppliedLine = Array.isArray(raw.critical_line_san) ? raw.critical_line_san.join(" ") : raw.critical_line_san;
   const line = typeof suppliedLine === "string"
     ? suppliedLine.replace(/\d+\.(?:\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean)
@@ -165,11 +168,11 @@ function normalized(out, api, req, server, seconds, token) {
     ? line.map((san, i) => i && (i + (pos.side === "b")) % 2 ? san : chess.moveLabel(san, raw.fen, i)).join(" ") : null;
   // A replayed line gives the exact position Queen should have analysed, rights and en passant included.
   const asked = typeof req.moves === "string" && req.moves ? req.moves.split(" ") : [];
-  const expected = asked.length ? chess.replay(req.fen, asked) : null;
+  const expected = chess.replay(req.fen, asked); // with no moves: the request root itself, compared field by field
   const same = (a, b) => a.split(" ").slice(0, 4).join(" ") === b.split(" ").slice(0, 4).join(" ");
   // With an exact site FEN the snapshot also carries its rights: a move line must not widen them.
   const { castle } = req.snapshot;
-  const positionOk = (!expected || same(raw.fen, expected)) && (req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
+  const positionOk = !!expected && same(raw.fen, expected) && (req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
     pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played) &&
     (castle === undefined || [...castle.replace("-", "")].every((right) => pos.castle.includes(right))));
   return guard(scrub({ server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
@@ -220,10 +223,12 @@ async function getServers(req, lastServer, tokenState) {
   });
 }
 
-// Retry-After is delta seconds or an HTTP date; it is passed on so the panel can say when to try again.
+// Retry-After is delta seconds or an HTTP date. Waits are capped at RETRY_CAP seconds, the same cap the panel's
+// countdown uses, so the worker's cooldown and the panel's button always end together.
+const RETRY_CAP = 600;
 function retryAfter(value) {
   const s = /^\s*\d+\s*$/.test(value || "") ? +value : Math.ceil((Date.parse(value) - Date.now()) / 1000);
-  return s > 0 && s <= 86400 ? s : undefined;
+  return s > 0 ? Math.min(s, RETRY_CAP) : undefined;
 }
 
 async function requireResponse(res, sentToken) {
@@ -403,7 +408,11 @@ function startExtension() {
     } catch (err) {
       const code = Object.hasOwn(CODES, err?.code) ? err.code : "bad_response";
       const retry = err?.code === code && err.retryAfter ? { retryAfter: err.retryAfter } : {};
-      for (const client of job.clients) send(client, { error: { code, detail: CODES[code], ...retry } });
+      // The server that failed last becomes the tab's "last server", so "Try the other server" picks the other one.
+      for (const client of job.clients) {
+        if (job.server && job.server !== "") lastServer.set(client.tab, job.server);
+        send(client, { error: { code, detail: CODES[code], server: job.server, ...retry } });
+      }
     } finally {
       clearTimeout(overall);
       clearInterval(keepalive);
@@ -457,7 +466,10 @@ function startExtension() {
       if (msg.type === "openOptions") return chrome.runtime.openOptionsPage();
       if (msg.type === "getPrefs") {
         const { dock, firstUseSeen } = await chrome.storage.local.get(["dock", "firstUseSeen"]);
-        return { dock: dock === "left" ? "left" : "right", firstUseSeen: firstUseSeen === true };
+        // The key the user actually bound to "open-panel" in chrome://extensions/shortcuts ("" when unbound).
+        const commands = await chrome.commands?.getAll?.().catch(() => []) ?? [];
+        const shortcut = commands.find((c) => c.name === "open-panel")?.shortcut || "";
+        return { dock: dock === "left" ? "left" : "right", firstUseSeen: firstUseSeen === true, shortcut };
       }
       const prefs = {};
       if (["left", "right"].includes(msg.prefs?.dock)) prefs.dock = msg.prefs.dock;

@@ -27,6 +27,16 @@ var AQ = globalThis.AQ = { adapters: [] };
 
   // Layout-free visibility for AQ.gate(): only the hidden attribute and aria-hidden.
   AQ.shown = (el) => !el.closest("[hidden], [aria-hidden='true']");
+  // Style-only visibility for AQ.confirm(): checkVisibility() reads computed style (display, visibility,
+  // content-visibility) of the element and its ancestors, never layout. Browsers without it fall back to the same
+  // computed-style walk.
+  AQ.styled = (el) => AQ.shown(el) && (el.checkVisibility ? el.checkVisibility({ visibilityProperty: true }) : (() => {
+    for (let node = el; node; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+    }
+    return true;
+  })());
   AQ.tag = (pgn, name) => new RegExp('^\\s*\\[' + name + '\\s+"([^"]*)"\\s*\\]', "im").exec(pgn)?.[1];
   AQ.hasBoard = (selector) => [...document.querySelectorAll(selector)].some((el) => !el.closest(MINI));
   AQ.transient = ".anim, .animating, .dragging, .ghost, .fading";
@@ -47,8 +57,10 @@ var AQ = globalThis.AQ = { adapters: [] };
       const from = lastMove.find((sq) => !pieces[sq]);
       const piece = pieces[to];
       side = piece === piece.toUpperCase() ? "b" : "w";
-      if (from[0] === to[0] && (piece === "P" && from[1] + to[1] === "24" || piece === "p" && from[1] + to[1] === "75"))
-        ep = to[0] + (side === "b" ? "3" : "6");
+      // A double push sets en passant only when the side to move can legally take, as in the replay and the Spaces.
+      const square = to[0] + (side === "b" ? "3" : "6");
+      if (from[0] === to[0] && (piece === "P" && from[1] + to[1] === "24" || piece === "p" && from[1] + to[1] === "75") &&
+          C.enPassant(pieces, side, square)) ep = square;
     }
     const check = C.isPlausibleBoard(pieces);
     return { placement: C.placementToString(pieces), side, sideSource: side ? "lastmove" : null,
@@ -75,6 +87,19 @@ var AQ = globalThis.AQ = { adapters: [] };
   AQ.fenWithSide = (board, side) => board.fen6 && side === board.side ? board.fen6 :
     [board.placement, side, board.castle, side === board.side ? board.ep : "-", 0, 1].join(" ");
 
+  // lila writes its FEN input as a property, which no MutationObserver sees, so a read can catch it a step behind the
+  // board. When that is the only problem, nudge the open panel once, 300 ms later, by touching our own host element
+  // (never the site's DOM); the same disagreement is not retried again.
+  let rechecked = "", recheckTimer = 0;
+  AQ.recheck = (key) => {
+    if (key === rechecked || recheckTimer) return;
+    rechecked = key;
+    recheckTimer = setTimeout(() => {
+      recheckTimer = 0;
+      document.querySelector('[data-testid="aq-host"]')?.setAttribute("data-aq-recheck", String(Date.now()));
+    }, 300);
+  };
+
   AQ.position = ({ page, gate, board, line, exactFen }) => {
     let root = line?.root ?? null;
     let moves = line?.moves ?? null;
@@ -84,6 +109,7 @@ var AQ = globalThis.AQ = { adapters: [] };
     if (exact && board.valid) {
       if (C.placementToString(exact.placement) !== board.placement || (highlightSide && highlightSide !== exact.side)) {
         crossCheck = { ok: false, reason: "The site FEN disagrees with the board" };
+        AQ.recheck(exactFen + " " + board.placement);
       } else {
         Object.assign(board, { side: exact.side, sideSource: "fen", castle: exact.castle, ep: exact.ep,
           fen6: exactFen, castleGuessed: false });
@@ -135,9 +161,12 @@ var AQ = globalThis.AQ = { adapters: [] };
     cached = { href: location.href, board, value };
     return value;
   };
+  // Before the launcher appears: the same gate evaluation with style visibility for the few evidence elements (a
+  // result, a clock, a variant badge), so a finished-game marker hidden by CSS doesn't open it. No board scan and no
+  // getBoundingClientRect/getClientRects; readPosition() still decides when the panel opens.
   AQ.confirm = () => {
-    const position = AQ.readPosition();
-    return !!position && position.gate === null;
+    const adapter = AQ.adapters.find((a) => a.host === location.hostname);
+    return !!adapter?.matches() && adapter.gate(AQ.styled) === null;
   };
 
   AQ.readPosition = () => {

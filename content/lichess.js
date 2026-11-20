@@ -31,9 +31,11 @@
       return { page, gate: "variant" };
     const running = document.querySelector(".rclock.running, .clock.running, .rclock-correspondence.running, .forecast");
     // Results: the round view's result-wrap and the analysis view's renderResult (div.analyse__moves > div > div.result).
-    const result = [...document.querySelectorAll(".result-wrap .result, .analyse__moves .result, .game__meta .result, .round__app .result")]
+    // Only lila's own result slots count, and [Result] only from the exported PGN text (div.pgn), never a textarea.
+    const result = [...document.querySelectorAll(".result-wrap .result, .analyse__moves .result")]
       .some((el) => resultText(el.textContent) && visible(el));
-    if (running || (round || gameAnalysis) && !result && !(tree && resultText(tag(pgn, "Result"))))
+    const exported = [...document.querySelectorAll("div.pgn")].map((el) => el.textContent).join("\n");
+    if (running || (round || gameAnalysis) && !result && !(tree && resultText(tag(exported, "Result"))))
       return { page, gate: "in_progress" };
     if (tree && (study || /^\/analysis(?:\/|$)/.test(path) || round || gameAnalysis)) return { page, gate: null };
     if (round && result) return { page: "game", gate: null };
@@ -107,7 +109,7 @@
     host: "lichess.org",
     board: "cg-board",
     matches: () => location.hostname === "lichess.org" && AQ.hasBoard("cg-board"),
-    gate: () => scope(document.querySelector(TREE), pgnText(), AQ.shown).gate,
+    gate: (visible = AQ.shown) => scope(document.querySelector(TREE), pgnText(), visible).gate,
     read() {
       const el = AQ.mainBoard("cg-board", ".main-board, .round__app, .analyse__board");
       if (!el) return null;
