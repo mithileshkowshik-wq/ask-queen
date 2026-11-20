@@ -64,7 +64,7 @@ Site and page:       chess.com, Game Review (finished live game)
 Extension version:   1.0.0 (commit before the live fix)
 Selected move:       9.O-O (ply 16)
 Asked:               Best move (Explain was not offered; see result)
-Expected position:   r1bq1rk1/p3bppp/1p2pn2/3p4/3P1B2/3BPN2/PP1N1PPP/R2Q1RK1 b - - (after 9.O-O), Black to move
+Expected position:   rnbq1rk1/p3bppp/1p2pn2/3p4/3P1B2/3BPN2/PP1N1PPP/R2Q1RK1 b - - (after 9.O-O), Black to move
 Position read:       "Position on the board, Black to move", with the side detected from the last move; castling
                      correctly none for both sides; the analysis names the same pieces (Bf4, Bd3, Nb8, Be7, d4/d5)
 Result:              Launcher appeared (gating correct) and the board was read correctly. The move list was NOT used,
