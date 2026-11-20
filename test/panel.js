@@ -232,6 +232,50 @@ function runPanelTests(test) {
       } finally { await s.close(); }
     }
   });
+  test("Panel never shows 8 characters in a row of the token body through label, list or bold splits (GPT round 5)", async () => {
+    const lower = "hf_" + "Abcd" + "Efgh" + "Ijkl" + "Mnop", upper = "hf_" + "ABCD" + "EFGH" + "IJKL" + "MNOP";
+    const e = F.SITES["lichess-analysis"].expect;
+    for (const [token, analysis] of [
+      [lower, ["hf_", "Abcd:", "Efgh:", "Ijkl:", "Mnop:"].join("\n")], // the round-5 probe
+      [lower, ["hf_", "ABCD:", "EFGH:", "IJKL:", "MNOP:"].join("\n")], // label headings were recased to "Abcd"
+      [upper, ["hf_", "ABCD:", "EFGH:", "IJKL:", "MNOP:"].join("\n")],
+      [lower, ["- Abcd", "- Efgh", "- Ijkl", "- Mnop"].join("\n")],
+      [lower, "**Abcd**\n**Efgh**\n**Ijkl**\n**Mnop**"],
+      [lower, "1. Abcd\n2. Efgh\n3. Ijkl\n4. Mnop"],
+    ]) {
+      const s = await panelFixture("lichess-analysis");
+      try {
+        await s.open();
+        s.click("explain");
+        s.events.message({ result: bg.normalized([{ fen: e.replyFen, analysis, best_move_san: null }], "boneyland", s.calls[0], "boneyland", 1, token) });
+        assert(s.element("analysis"), "the result is shown");
+        const shown = s.root.textContent.replace(/[^A-Za-z0-9]/g, ""), body = token.slice(3);
+        for (let i = 0; i + 8 <= body.length; i++) assert(!shown.includes(body.slice(i, i + 8)), JSON.stringify(analysis) + " shows " + body.slice(i, i + 8));
+      } finally { await s.close(); }
+    }
+  });
+  test("An unchanged daily game board stays closed after an SPA move to /analysis; a new board opens (GPT round 5)", async () => {
+    const s = await panelFixture("chesscom-daily");
+    try {
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 1250));
+      assert(s.element("launcher").hidden);
+      s.w.history.pushState({}, "", "/analysis");
+      await tick();
+      assert(s.element("launcher").hidden, "same daily board under /analysis");
+      s.w.document.dispatchEvent(new s.w.Event("pointerdown"));
+      await tick();
+      assert(s.element("launcher").hidden, "after a click");
+      assert.equal(s.w.AQ.readPosition().gate, "in_progress");
+      assert.equal(s.calls.length, 0);
+      // Positive control: the standalone analysis page with its own new board.
+      s.w.document.body.innerHTML = F.SITES["chesscom-analysis"].html.match(/<body>([\s\S]*)<\/body>/)[1];
+      await tick();
+      await s.open();
+      s.click("best");
+      assert.equal(s.calls.length, 1);
+      assert.equal(s.calls[0].moves, F.SITES["chesscom-analysis"].expect.moves);
+    } finally { await s.close(); }
+  });
 }
 
 module.exports = { runPanelTests, panelFixture, assertSafeAnalysis };

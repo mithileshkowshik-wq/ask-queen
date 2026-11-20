@@ -423,6 +423,28 @@ async function runBrowser(extension, temp, out, test, packaged) {
       });
     });
 
+    await test("Browser SPA move to /analysis that keeps a daily game board stays closed; a new board opens (GPT round 5)", async () => {
+      const { since } = await setup();
+      await withPage("chesscom-daily", async (page, ui) => {
+        await sleep(1500);
+        assert.equal(await ui("launcher").isVisible(), false);
+        // A daily game has no running clock: only the board element tells it apart from a standalone analysis board.
+        await page.evaluate(() => history.pushState({}, "", "/analysis"));
+        await sleep(2500);
+        assert.equal(await ui("launcher").isVisible(), false, "route changed, daily board kept");
+        await page.mouse.click(5, 5);
+        await sleep(1500);
+        assert.equal(await ui("launcher").isVisible(), false, "after a click");
+        assert.equal(posts(since).length, 0);
+        // Positive control: the standalone analysis page with its own new board opens and asks.
+        await navigate(page, "chesscom-analysis");
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        assert.equal(posts(since).length, 1);
+      });
+    });
+
     await test("Browser closed launcher ticks make no layout reads, also across a URL change", async () => {
       await setup();
       await withPage("chesscom-analysis", async (page, ui) => {

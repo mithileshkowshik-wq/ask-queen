@@ -404,6 +404,31 @@ function runUnits(test) {
     assert.equal(bg.normalized([{ ...F.boneylandSuccess, analysis: "Fine hf_ prose about the h-file and more words." }],
       "boneyland", req, "boneyland", 1, token).analysis, "Fine hf_ prose about the h-file and more words.");
   });
+  test("Token guard compares letters and digits only: label, list, bold and number splits are caught (GPT round 5)", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const run = (analysis, token) => bg.normalized([{ ...F.boneylandSuccess, analysis }], "boneyland", req, "boneyland", 1, token).analysis;
+    const lower = "hf_" + "Abcd" + "Efgh" + "Ijkl" + "Mnop", upper = "hf_" + "ABCD" + "EFGH" + "IJKL" + "MNOP";
+    for (const [token, analysis] of [
+      [lower, ["hf_", "Abcd:", "Efgh:", "Ijkl:", "Mnop:"].join("\n")],
+      [upper, ["hf_", "ABCD:", "EFGH:", "IJKL:", "MNOP:"].join("\n")], // label headings the old guard dropped
+      [upper, "**ABCD:**\nEF_GH: x\nIJKL:\nMNOP:"],
+      [lower, ["- Abcd", "- Efgh", "* Ijkl", "+ Mnop"].join("\n")],
+      [lower, "**Abcd**\n**Efgh**\n\n**Ijkl**\n**Mnop**"],
+      [lower, "# Abcd\n## Efgh\n1. Ijkl\n2) Mnop"],
+      [lower, "1. Abcd\n22. Efgh"],
+      [lower, "Ab`cd`Ef~gh~ and more"],
+    ]) assert.equal(run(analysis, token), "[redacted]", JSON.stringify(analysis));
+    // A bare critical line drops its move numbers in the panel.
+    assert.equal(bg.guard({ analysis: "Fine.", criticalLine: "12.Abcd 13.Efgh" }, lower).criticalLine, "[redacted]");
+    // Case-sensitive, and ordinary prose and SAN keep their text.
+    assert.equal(run("ABCDEFGH and abcdefgh", lower), "ABCDEFGH and abcdefgh");
+    const real = "hf_" + "qWzRkTyLmNpXcVbDfGhJsAeUoI";
+    for (const analysis of [F.boneyland[0].analysis, F.boneylandSuccess.analysis, F.hugging[2],
+      "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4 Nf6 5. O-O Be7 6. Re1 b5 7. Bb3 d6 8. c3 O-O 9. h3 Nb8 10. d4 Nbd7",
+      "## Plan\n- Nxe5 Qf6\n- Qxd8+ Kxd8\n1. Rook to the open h-file, then Rh3-g3."]) {
+      assert.notEqual(run(analysis, real), "[redacted]", analysis.slice(0, 40));
+    }
+  });
   test("Evaluation rows: both real recordings name a side, a sideless sentence is dropped, an equal one names both", () => {
     const hugReq = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
     const hug = bg.normalized(F.hugging, "hugging-apps", hugReq, "hugging-apps", 16);

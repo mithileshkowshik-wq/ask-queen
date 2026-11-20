@@ -82,6 +82,7 @@ Returns `null` when there is no board at all. Otherwise it returns:
 `AQ.gate()` returns `{ hasBoard: bool, gate: null | "in_progress" | "variant" | "puzzle" | "unknown_context" }` from the URL and cheap selector checks only: no `getBoundingClientRect`, `getComputedStyle` or other layout reads (visibility is judged only by `[hidden]`/`aria-hidden`). `gate` is `null` when `hasBoard` is false. The closed panel uses it to show or hide the launcher; `readPosition()` (with layout reads) stays the authority when the panel opens and at click time. A unit test checks that it agrees with `readPosition().gate` on every fixture with layout reads made to throw.
 - **Cost (fix pass 3).** The result is cached. It is recomputed only when `location.href` changes, the first board element (`document.querySelector` of the site's board selector) changes, or after a `pointerdown`/`keydown` anywhere (passive capture listeners that only set a flag). A quiet tick costs one `querySelector`. A change with no such trigger keeps the old answer until the next trigger; on a game page that means staying closed. The measured idle cost is in `docs/perf.md`.
 - `AQ.confirm()` (fix pass 4) is evidence-only. It runs the same gate evaluation with style visibility (`el.checkVisibility()`, which reads computed style rather than layout) on the few evidence elements: results, clocks, variant badges and game-over elements. It returns `true` only when that gate is `null`. It does not scan the board and never calls `getBoundingClientRect`/`getClientRects`. The panel calls it before it shows the launcher when `AQ.gate()` turns open, so a finished-game marker hidden by CSS keeps the launcher closed. `readPosition()` runs only when the panel opens and at click time.
+- **Held boards (post-round 5).** chess.com's adapter remembers, in a `WeakSet`, every board element it has seen while any gate was set. The standalone /analysis path (no game id) gates such a board as `in_progress`. Only a new board element opens there. Game-page evidence does not consult the set, so a game that finishes in place still opens.
 
 ## Messages
 **Long-lived request:** the panel opens `chrome.runtime.connect({ name: "queen" })` and posts:
@@ -102,6 +103,8 @@ Returns `null` when there is no board at all. Otherwise it returns:
 Disconnecting the port means cancel. The background aborts within 1 s.
 
 Every string in `R` and in errors has the saved token, and any `hf_` token-shaped text, replaced with `[token removed]` as the last step before posting (also when `*`, `_`, `` ` `` or `~` are wedged between its characters).
+
+**Final token guard (post-round 5).** After that, `evaluationText`, `criticalLine` and `analysis` are reduced to letters and digits (case-sensitive). Each is checked as written, without `<PIECE_…>`/`<SQUARE_…>` tags and line-leading list numbers, and without move numbers. They are also checked joined in that display order. A field that holds any 8 characters in a row of the token body becomes `[redacted]`, and a split across fields clears them all. In return, the panel's renderer never adds or recases a letter (label headings keep the label's own letters). It only drops markup, those tags, list numbers and, in a bare critical line, move numbers.
 
 **Normalized result `R`:**
 ```

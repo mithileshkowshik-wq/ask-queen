@@ -197,9 +197,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       if (!line || /^([-*_])\1{2,}$/.test(line)) flush();
       else if ((m = /^#{1,6}\s+(.+)$/.exec(line))) { flush(); out.push(h("h4", {}, inline(m[1]))); }
       else if ((m = /^(?:\*\*)?([A-Z][A-Z_ ]{2,24}):(?:\*\*)?\s*(.*)$/.exec(line))) {
-        flush(); // "ANALYSIS:" -> a small heading; the rest of the line starts a paragraph
-        const t = m[1].replace(/_/g, " ").toLowerCase();
-        out.push(h("h4", {}, text(t[0].toUpperCase() + t.slice(1))));
+        flush(); // "KEY_IDEAS:" -> a small heading "KEY IDEAS"; the rest of the line starts a paragraph. Never recased,
+        out.push(h("h4", {}, text(m[1].replace(/_/g, " ")))); // so the background's token guard sees the letters shown
         if (m[2]) add("p", m[2]);
       }
       else if ((m = /^[-*•]\s+(.+)$/.exec(line))) add("ul", [0, m[1]]);

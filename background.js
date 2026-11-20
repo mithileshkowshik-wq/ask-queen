@@ -100,18 +100,20 @@ function scrub(value, token) {
     return s.replace(new RegExp(`h${GAP}f${GAP}_(?:${GAP}[A-Za-z0-9]){8,}`, "g"), "[token removed]");
   });
 }
-// Last line of defence, on the text as the panel will show it: the line-leading list, heading and label markers that
-// its Markdown renderer consumes are dropped, then only letters and digits are kept. No displayed field, and not the
-// fields joined, may contain the token, its body without "hf_", or any 8 characters in a row of that body (nor a long
-// hf_ run). A field that does is replaced; a split across fields clears them all.
-const SHOWN = ["analysis", "evaluationText", "criticalLine"];
-const MARKER = /^\s*(?:#{1,6}\s+|(?:\d+[.)]|[-*+])\s+|(?:\*\*)?[A-Z][A-Z_ ]{2,24}:(?:\*\*)?\s*)/;
+// Last line of defence, on a canonical form: letters and digits only, case-sensitive. The panel never adds or recases
+// a letter; it only drops characters: markup, <PIECE_…> tags and line-leading list numbers (shown as list markers),
+// and move numbers in a bare critical line. So each string is checked as written and with those dropped. No displayed
+// field, and not the fields joined in display order, may contain any 8 characters in a row of the token's body (nor a
+// long hf_ run). A field that does is replaced; a split across fields clears them all.
+const SHOWN = ["evaluationText", "criticalLine", "analysis"];
+const views = (s) => [s, s.replace(/<\/?(?:PIECE|SQUARE)_[^>\s]*>/g, "").split(/\r?\n/)
+  .map((line) => line.replace(/^\s*\d{1,4}[.)]\s+(?=\S)/, "")).join("\n"), s.replace(/\d+\.(?:\.\.)?\s*/g, "")];
 function guard(result, token) {
-  const rendered = (s) => (s || "").split("\n").map((line) => line.replace(MARKER, "")).join("\n");
-  const alnum = (s) => rendered(s).replace(/[^A-Za-z0-9]/g, "");
+  const alnum = (s) => s.replace(/[^A-Za-z0-9]/g, "");
   const body = token ? alnum(token.replace(/^hf_/, "")) : "";
   const runs = body.length >= 8 ? Array.from({ length: body.length - 7 }, (_, i) => body.slice(i, i + 8)) : [];
-  const leaks = (s) => runs.some((run) => alnum(s).includes(run)) || /hf_[A-Za-z0-9]{24,}/.test(rendered(s).replace(/[\s*`~]/g, ""));
+  const leaks = (s) => views(s || "").some((v) => runs.some((run) => alnum(v).includes(run)) ||
+    /hf_[A-Za-z0-9]{24,}/.test(v.replace(/[\s*`~]/g, "")));
   if (!leaks(SHOWN.map((key) => result[key]).join("\n"))) return result;
   const one = SHOWN.some((key) => leaks(result[key]));
   return { ...result, ...Object.fromEntries(SHOWN.filter((key) => result[key] != null && (!one || leaks(result[key])))
