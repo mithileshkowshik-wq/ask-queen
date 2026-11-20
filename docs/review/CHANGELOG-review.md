@@ -179,3 +179,17 @@ Done by Opus 5.5. Each entry gives the fix and its guarding test; every name is 
   - `A board-fallback answer has no move numbers in its headline (clocks are unknown)`.
   - The zoom200 screenshots come from CDP `Page.captureScreenshot`, with `innerWidth` asserted to be 640.
   - `docs/perf.md` now names Chromium 158 and Playwright 1.65.0, and describes the evidence-only confirm.
+
+## Post-round-5 fixes (GPT round-5 probes)
+Done by Opus 5.5.
+
+- **GPT H3, token spelled out through label headings** (`background.js` `guard`, `content/panel.js` `md`).
+  - The probe: "hf_" followed by the lines "ABCD:", "EFGH:", "IJKL:", "MNOP:". The panel turned each label into an h4 and recased it ("Abcd"), so the panel text spelled the saved token. The old guard dropped label lines before comparing, so it missed them.
+  - The panel no longer recases label headings. They show their own letters, with `_` as a space. The renderer now never adds or recases a letter. It only drops markup, `<PIECE_…>`/`<SQUARE_…>` tags, line-leading list numbers (shown as list markers) and, in a bare critical line, move numbers.
+  - The guard compares a canonical form: letters and digits only, case-sensitive. It checks each string as written, without the tags and list numbers, and without move numbers. The fields are also joined in display order (evaluation, critical line, analysis). If any 8 characters in a row of the token body appear, the field is redacted as before (a split across fields clears them all). The marker-stripping list is gone.
+  - Guarded by: `Token guard compares letters and digits only: label, list, bold and number splits are caught (GPT round 5)` (also covers a bare critical line, case sensitivity, and recorded prose and SAN with a realistic token left intact) and `Panel never shows 8 characters in a row of the token body through label, list or bold splits (GPT round 5)` (the probe end to end through `normalized` and the panel; panel text, letters and digits only, holds no 8-character run of the body; plus label, "- " list, "**…**" and ordered-list variants).
+- **GPT H6, an unchanged daily board accepted after an SPA move to /analysis** (`content/chesscom.js` `scope`).
+  - A daily game has no running clock, so the round-4 clock check did not apply. Every board element that the adapter sees while any gate is set goes into a `WeakSet`. The standalone /analysis path (no game id) treats such a board as `in_progress`. A new board element, as on a fresh analysis page, is unaffected.
+  - Game-page evidence does not consult the set, so a game that finishes in place still opens. Layout-free: one `querySelectorAll` of the board selector, no rect reads. This fails closed: a board seen gated stays closed under standalone /analysis until the page reloads or the site mounts a new board.
+  - Guarded by: `An unchanged daily game board stays closed after an SPA move to /analysis; a new board opens (GPT round 5)` (the repro: launcher hidden, `readPosition().gate` is `in_progress`, zero asks; then a new analysis board asks), `Browser SPA move to /analysis that keeps a daily game board stays closed; a new board opens (GPT round 5)` (real navigation, zero POSTs, then a new board's ask gives one POST), and the existing `Browser closed launcher ticks make no layout reads, also across a URL change` and `AQ.gate() caches: …` (finish in place opens).
+- Mutation sanity: with each fix reverted, its new tests fail. With the old renderer alone, the panel test fails (the guard is case-sensitive, so a recased heading would leak).

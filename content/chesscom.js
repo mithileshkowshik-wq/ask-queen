@@ -21,8 +21,16 @@
   // Fail closed. Puzzles and variants first. Any page tied to a game (/game/…, /analysis/game/…, Game Review) needs a
   // finished game on screen: a result token in the move list, a game-over element in the main board layout, or the
   // share PGN's [Result]. A running clock always means the game is on. "tab=review" and "/review" only label the page.
-  // Only the standalone analysis board (no game id) is open without that evidence.
+  // Only the standalone analysis board (no game id) is open without that evidence, and only with a board element never
+  // seen gated: a daily game (no running clock) kept on screen across an SPA move to /analysis stays closed.
+  const held = new WeakSet();
   function scope(visible, pgn) {
+    const boards = [...document.querySelectorAll(BOARD)];
+    const context = route(visible, pgn, boards);
+    if (context.gate) for (const board of boards) held.add(board);
+    return context;
+  }
+  function route(visible, pgn, boards) {
     const path = location.pathname;
     const analysis = /^\/analysis(?:\/|$)/i.test(path);
     const review = /\/review\/?$/i.test(path) || new URLSearchParams(location.search).get("tab") === "review";
@@ -40,7 +48,7 @@
     // stays closed.
     if ([...document.querySelectorAll(".clock-component.clock-player-turn, .clock-running")].some(visible)) return { page, gate: "in_progress" };
     if (nonStandardStart(pgn)) return { page, gate: "variant" };
-    if (analysis && !game && !review) return { page, gate: null };
+    if (analysis && !game && !review) return { page, gate: boards.some((board) => held.has(board)) ? "in_progress" : null };
     if (!game) return { page, gate: "unknown_context" };
     const layout = ".board-layout-main, .board-layout-chessboard";
     const finished = [...document.querySelectorAll(`:is(${layout}) :is(.game-over-modal, .game-over-header, .game-over-modal-content)`)].some(visible) ||
