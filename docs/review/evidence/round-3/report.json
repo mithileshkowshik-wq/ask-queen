@@ -1,0 +1,1404 @@
+{
+  "round": "3",
+  "date": "2026-11-20T03:17:48.904Z",
+  "passed": 349,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Manifest is MV3 with exactly the two built-in HTTPS grants and optional Space origins",
+      "ok": true
+    },
+    {
+      "name": "Shipped JavaScript parses with no dynamic code execution",
+      "ok": true
+    },
+    {
+      "name": "Every sending fixture has a mock reply FEN for both API shapes",
+      "ok": true
+    },
+    {
+      "name": "Allowlist zip contains exactly the runtime files and preserves icon dimensions",
+      "ok": true
+    },
+    {
+      "name": "FEN parser preserves all six fields and rejects malformed ranks and clocks",
+      "ok": true
+    },
+    {
+      "name": "Strict SAN strips annotations only and never repairs a localized or malformed move",
+      "ok": true
+    },
+    {
+      "name": "Pre-send checks enforce root-relative capture count, side, footprint and zero-ply placement",
+      "ok": true
+    },
+    {
+      "name": "Verify Best checks both placement and side",
+      "ok": true
+    },
+    {
+      "name": "Verify Explain reproduces quiet moves, both castles, en passant, promotion and a capture",
+      "ok": true
+    },
+    {
+      "name": "SAN/UCI matching checks the piece, square, disambiguation and promotion",
+      "ok": true
+    },
+    {
+      "name": "Board hygiene rejects impossible boards and ignores ambiguous highlights",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-analysis",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-start",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-final",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-flipped",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-board-side",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-mini",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-animation",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-impossible",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-disagree",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-mate",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-daily",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-960",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-variant",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-unknown",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-no-board",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-promotion",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-review",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-start",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-final",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-flipped",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-board-side",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-mini",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-animation",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-impossible",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-disagree",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-mate",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-daily",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-960",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-variant",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-unknown",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-no-board",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-promotion",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-variation",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-round",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-round-current",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-finished",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-study",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-custom-start",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-fen-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-streak",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-analysis",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-finished",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-variation",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-variation-ancestry",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-localized",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-live-markup",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-live-markup-black",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-text-figurines",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-hidden-result",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-live-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-daily-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-live-review",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-analysis-daily",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-analysis-live",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-custom-line",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-tagged-root",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture chesscom-row-number",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-rights-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-sibling-nf3",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-sibling-bc4",
+      "ok": true
+    },
+    {
+      "name": "Adapter fixture lichess-recorded",
+      "ok": true
+    },
+    {
+      "name": "AQ.gate() is layout-free and agrees with readPosition() on every fixture",
+      "ok": true
+    },
+    {
+      "name": "A moving piece keeps the board unreadable until it lands",
+      "ok": true
+    },
+    {
+      "name": "With exact rights in the snapshot, Best needs equal rights and Explain may only lose rights",
+      "ok": true
+    },
+    {
+      "name": "Prose is confirmed only by the answering provider's own legality field",
+      "ok": true
+    },
+    {
+      "name": "The real boneyland recording normalizes with its evaluation sentence and a numbered line",
+      "ok": true
+    },
+    {
+      "name": "SSE parser handles arbitrary byte splits, CRLF, Unicode, multi-line data and no complete",
+      "ok": true
+    },
+    {
+      "name": "Best-move extraction handles positive and negative prose and never accepts lower-case pieces",
+      "ok": true
+    },
+    {
+      "name": "Both recorded API shapes normalize with strict move-source precedence and no HTML outputs",
+      "ok": true
+    },
+    {
+      "name": "Provider text drops well-formed HTML, SVG and model tokens but keeps a lone '<'",
+      "ok": true
+    },
+    {
+      "name": "Token redaction runs last and catches the saved token split by markup or Markdown",
+      "ok": true
+    },
+    {
+      "name": "All background codes have a fixture, with same/different/permanent fallback precedence",
+      "ok": true
+    },
+    {
+      "name": "Ask payload and custom origin validation reject unknown fields, unsafe SAN, URLs and caps",
+      "ok": true
+    },
+    {
+      "name": "Mutation sanity: flipped side parity fails the flipped fixture",
+      "ok": true
+    },
+    {
+      "name": "Mutation sanity: unconditional standard-root replay fails the custom start fixture",
+      "ok": true
+    },
+    {
+      "name": "Worker protects local storage on startup and install and limits prefs writes",
+      "ok": true
+    },
+    {
+      "name": "Worker strips check and annotation marks before sending SAN to the Space",
+      "ok": true
+    },
+    {
+      "name": "Worker validates the sender and disallows non-top-frame or invalid ask messages",
+      "ok": true
+    },
+    {
+      "name": "Worker coalesces duplicate asks, splits cancellation, serves the cache, spaces asks and changes fresh seed",
+      "ok": true
+    },
+    {
+      "name": "Worker survives 90 s of bytes, including heartbeat and partial lines, with keepalives and 60 s status",
+      "ok": true
+    },
+    {
+      "name": "Worker aborts at 45 s and reports two timeouts at 90 s",
+      "ok": true
+    },
+    {
+      "name": "Worker aborts at 45 s and gets a backup answer",
+      "ok": true
+    },
+    {
+      "name": "Worker aborts an unresponsive connect at 20 s and an active loop at 150 s overall",
+      "ok": true
+    },
+    {
+      "name": "Disconnecting the last client aborts immediately and late replies do not fall back",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: quota",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: token_rejected",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: busy",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: illegal_position",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: game_over",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: bad_response",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: unreachable",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: asleep",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: all_unavailable",
+      "ok": true
+    },
+    {
+      "name": "Worker error path: quota after fallback",
+      "ok": true
+    },
+    {
+      "name": "Worker treats 401 without a token as a dead server and tries the backup",
+      "ok": true
+    },
+    {
+      "name": "Worker passes Retry-After (seconds) with the busy error",
+      "ok": true
+    },
+    {
+      "name": "Worker passes Retry-After (HTTP date) with the busy error",
+      "ok": true
+    },
+    {
+      "name": "Worker tells a second tab that another tab is already asking",
+      "ok": true
+    },
+    {
+      "name": "Worker echoing the saved token in its answer never reaches the panel",
+      "ok": true
+    },
+    {
+      "name": "Worker tries backup on a stream with no complete",
+      "ok": true
+    },
+    {
+      "name": "Worker refuses malformed event IDs and redirects before issuing any follow-on request",
+      "ok": true
+    },
+    {
+      "name": "Custom origin grants and token consent are checked independently, and other uses the other server",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-analysis",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-start",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-final",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-flipped",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-board-side",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-mini",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-animation",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-impossible",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-disagree",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-mate",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-daily",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-960",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-variant",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-unknown",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-no-board",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-promotion",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-review",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-start",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-final",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-flipped",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-board-side",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-mini",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-animation",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-impossible",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-disagree",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-mate",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-daily",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-960",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-variant",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-unknown",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-no-board",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-promotion",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-variation",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-round",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-round-current",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-finished",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-study",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-custom-start",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-fen-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-streak",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-analysis",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-finished",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-variation",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-variation-ancestry",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-localized",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-live-markup",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-live-markup-black",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-text-figurines",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-hidden-result",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-live-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-daily-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-live-review",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-analysis-daily",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-analysis-live",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-custom-line",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-tagged-root",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture chesscom-row-number",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-rights-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-sibling-nf3",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-sibling-bc4",
+      "ok": true
+    },
+    {
+      "name": "Panel fixture lichess-recorded",
+      "ok": true
+    },
+    {
+      "name": "First-use notice and docking write only the panel prefs",
+      "ok": true
+    },
+    {
+      "name": "Shipped panel renders each typed error with an alert, action and collapsed details",
+      "ok": true
+    },
+    {
+      "name": "Shipped result renderer passes hostile strings through the escape-first Markdown subset",
+      "ok": true
+    },
+    {
+      "name": "Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion",
+      "ok": true
+    },
+    {
+      "name": "Panel rejects clicks after the cursor changes, then flags earlier results stale",
+      "ok": true
+    },
+    {
+      "name": "A click on another line's move while an ask is in flight cancels it and asks about the new move",
+      "ok": true
+    },
+    {
+      "name": "Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes",
+      "ok": true
+    },
+    {
+      "name": "Chromium major equals the manifest minimum_chrome_version",
+      "ok": true
+    },
+    {
+      "name": "axe reaches named and deliberately unnamed controls in the panel shadow root",
+      "ok": true
+    },
+    {
+      "name": "First-use notice and only an explicit click sends a request",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-analysis",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-start",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-final",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-flipped",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-board-side",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-mini",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-animation",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-impossible",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-disagree",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-mate",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-daily",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-960",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-variant",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-unknown",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-no-board",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-promotion",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-review",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-start",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-final",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-flipped",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-board-side",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-board-unknown",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-mini",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-animation",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-user-marked",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-impossible",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-disagree",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-mate",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-returned-rook",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-daily",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-960",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-variant",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-unknown",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-no-board",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-castle-white",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-castle-black",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-en-passant",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-promotion",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-underpromotion",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-variation",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-round",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-round-current",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-finished",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-study",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-custom-start",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-fen-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-streak",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-analysis",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-finished",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-variation",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-variation-ancestry",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-localized",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-live-markup",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-live-markup-black",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-text-figurines",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-hidden-result",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-live-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-daily-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-live-review",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-analysis-daily",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-analysis-live",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-custom-line",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-tagged-root",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture chesscom-row-number",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-rights-mismatch",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-sibling-nf3",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-sibling-bc4",
+      "ok": true
+    },
+    {
+      "name": "Browser fixture lichess-recorded",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate lichess-in-progress",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-960",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate lichess-puzzle",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-live-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-daily-tab-review",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-live-review",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-analysis-daily",
+      "ok": true
+    },
+    {
+      "name": "Open panel navigation gate chesscom-analysis-live",
+      "ok": true
+    },
+    {
+      "name": "Browser result-disagree",
+      "ok": true
+    },
+    {
+      "name": "Browser result-agree",
+      "ok": true
+    },
+    {
+      "name": "Browser result-best",
+      "ok": true
+    },
+    {
+      "name": "Browser result-from-text",
+      "ok": true
+    },
+    {
+      "name": "Browser result-no-clear-move",
+      "ok": true
+    },
+    {
+      "name": "Browser result-truncated",
+      "ok": true
+    },
+    {
+      "name": "Browser cache replay and stale result after a cursor change",
+      "ok": true
+    },
+    {
+      "name": "Browser error quota",
+      "ok": true
+    },
+    {
+      "name": "Browser error token_rejected",
+      "ok": true
+    },
+    {
+      "name": "Browser error unreachable",
+      "ok": true
+    },
+    {
+      "name": "Browser error asleep",
+      "ok": true
+    },
+    {
+      "name": "Browser error busy",
+      "ok": true
+    },
+    {
+      "name": "Browser error illegal_position",
+      "ok": true
+    },
+    {
+      "name": "Browser error game_over",
+      "ok": true
+    },
+    {
+      "name": "Browser error bad_response",
+      "ok": true
+    },
+    {
+      "name": "Browser error all_unavailable",
+      "ok": true
+    },
+    {
+      "name": "Browser error mismatch",
+      "ok": true
+    },
+    {
+      "name": "Browser primary 503 uses the backup and shows its recorded reply",
+      "ok": true
+    },
+    {
+      "name": "Browser Survival: 90 seconds of heartbeats keep the original worker and attempt alive",
+      "ok": true
+    },
+    {
+      "name": "Browser Timeout: primary aborts at 45 seconds and backup times out at 90 s",
+      "ok": true
+    },
+    {
+      "name": "Browser Timeout: primary aborts at 45 seconds and backup answers",
+      "ok": true
+    },
+    {
+      "name": "Browser streaming mock observes abort on cancel",
+      "ok": true
+    },
+    {
+      "name": "Browser streaming mock observes abort on close",
+      "ok": true
+    },
+    {
+      "name": "Browser streaming mock observes abort on navigate",
+      "ok": true
+    },
+    {
+      "name": "Browser streaming mock observes abort on tab",
+      "ok": true
+    },
+    {
+      "name": "Browser XSS corpus, network allowlist and isolated-world token denial",
+      "ok": true
+    },
+    {
+      "name": "Browser token echoed by a server never appears in the panel",
+      "ok": true
+    },
+    {
+      "name": "Browser keyboard-only ask, Escape and site shortcut isolation",
+      "ok": true
+    },
+    {
+      "name": "Browser ten SPA navigations retain one launcher and stable timer and listener counts",
+      "ok": true
+    },
+    {
+      "name": "Browser overlap or remembered dock at 1280×800 and 1440×900 for lichess-analysis",
+      "ok": true
+    },
+    {
+      "name": "Browser overlap or remembered dock at 1280×800 and 1440×900 for chesscom-review",
+      "ok": true
+    },
+    {
+      "name": "Browser port state cancelled",
+      "ok": true
+    },
+    {
+      "name": "Browser port state extension_reloaded",
+      "ok": true
+    },
+    {
+      "name": "Browser panel and options fit 320x568 with 24 px targets",
+      "ok": true
+    },
+    {
+      "name": "Browser panel and options fit 640x400 with 24 px targets",
+      "ok": true
+    },
+    {
+      "name": "Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent",
+      "ok": true
+    },
+    {
+      "name": "Browser quota recovery: add a token in Settings, then retry on the same page",
+      "ok": true
+    },
+    {
+      "name": "Browser options render and pass axe",
+      "ok": true
+    },
+    {
+      "name": "Browser screenshots pass axe in every displayed panel state",
+      "ok": true
+    },
+    {
+      "name": "Browser reports no unexpected requests, uncaught errors, or mock mismatches",
+      "ok": true
+    },
+    {
+      "name": "Extracted allowlist zip loads in Chromium",
+      "ok": true
+    },
+    {
+      "name": "Unpacked extension E2E harness on Chromium",
+      "ok": true
+    }
+  ]
+}
