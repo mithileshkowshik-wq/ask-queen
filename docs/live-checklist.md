@@ -73,6 +73,27 @@ Result:              Launcher appeared (gating correct) and the board was read c
 Signed by the owner: PENDING
 ```
 
+### chess.com, 2026-11-19, build 1.0.0 (after the live fix, commit 651b93a), SIGNED
+
+**Status: signed by the owner in chat ("confirmed Mithilesh Kowshik", 2026-11-19).** The fields were filled in by the
+coordinator from the owner's screenshot and the FEN the owner copied with **Copy FEN**.
+
+```
+Date:                2026-11-19
+Site and page:       chess.com, Game Review of a finished live game (/analysis/game/live/187446826044/review)
+Extension version:   1.0.0 (commit 651b93a, with the chess.com move-list fix)
+Selected move:       15.Nf3 (White; marked "??" by chess.com)
+Asked:               Explain 15.Nf3
+Expected position:   the position before 15.Nf3: White knight on d2, f3 empty, White to move on move 15, no castling
+                     rights (both sides castled)
+Position read:       Panel: "15.Nf3, White played this. Black is to move." with buttons "Explain 15.Nf3" and
+                     "Best move for Black". Copy FEN after the answer:
+                     r1r3k1/p4ppp/npNqpn2/3p4/3P4/4P3/PP1N1PPP/2RQ1RK1 w - - 2 15
+Result:              read correctly. The move list is used, the side and move number are right, and the FEN is the
+                     exact position before the selected move.
+Signed by the owner: Mithilesh Kowshik, 2026-11-19 (in chat)
+```
+
 ### lichess (optional)
 
 No live check recorded.
