@@ -299,12 +299,16 @@ function liveReview(moves, selected) {
   for (let i = 0; i < moves.length; i += 2) {
     rows.push(`<div class="main-line-row move-list-row ${i % 4 ? "dark" : "light"}-row" data-whole-move-number="${i / 2 + 1}">${i / 2 + 1}.  ${node(moves[i], i)}  ${moves[i + 1] ? node(moves[i + 1], i + 1) : ""}  <div data-move-list-el="timestamp" data-ply="${i + 1}" data-time="46" class="time-white">4.6s</div></div>`);
   }
+  // Result row and review clocks exactly as captured on the live Game Review page (2026-11-19).
+  rows.push('<div class="main-line-row move-list-row result-row"><span class="game-result">0-1 </span></div>');
   return `<div class="move-list-container">${rows.join("")}</div>`;
 }
+const LIVE_REVIEW_CLOCKS = '<div class="move-time-time move-time-dark player-clock"><div class="move-time-content move-time-monospace">9:06</div></div>' +
+  '<div class="move-time-time move-time-iconless move-time-inactive player-clock"><div class="move-time-content move-time-monospace">5:50</div></div>';
 fixture("chesscom-live-markup", { url: "/analysis/game/live/187446826044/review?move=4", fen: ITALIAN, highlight: [["f1"], ["c4"]],
-  customTree: liveReview(OPENING, 4), expect: fromStart(OPENING, ITALIAN) });
+  customTree: liveReview(OPENING, 4), finished: false, extra: LIVE_REVIEW_CLOCKS, expect: fromStart(OPENING, ITALIAN) });
 fixture("chesscom-live-markup-black", { url: "/analysis/game/live/187446826044/review?move=3", fen: NC6, highlight: [["b8"], ["c6"]],
-  customTree: liveReview(OPENING.slice(0, 4), 3), expect: fromStart(OPENING.slice(0, 4), NC6) });
+  customTree: liveReview(OPENING.slice(0, 4), 3), finished: false, extra: LIVE_REVIEW_CLOCKS, expect: fromStart(OPENING.slice(0, 4), NC6) });
 fixture("chesscom-text-figurines", { url: "/analysis", fen: ITALIAN, highlight: [["f1"], ["c4"]],
   customTree: review(["e4", "e5", "♘f3", "♞c6", "♗c4"], 4), expect: fromStart(OPENING, ITALIAN) });
 fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, finished: false,
