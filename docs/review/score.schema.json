@@ -1,0 +1,26 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reviewer", "round", "criteria", "weighted_mean", "caps_triggered", "overall", "issues"],
+  "properties": {
+    "reviewer": { "type": "string" },
+    "round": { "type": "integer" },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "weight", "score", "n_met", "n_total_at_next_level", "met", "unmet"],
+        "properties": {
+          "id": { "type": "string" }, "weight": { "type": "number" }, "score": { "type": "number" },
+          "n_met": { "type": "integer" }, "n_total_at_next_level": { "type": "integer" },
+          "met": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["condition", "evidence"], "properties": { "condition": { "type": "string" }, "evidence": { "type": "string" } } } },
+          "unmet": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["condition", "evidence", "expected", "observed"], "properties": { "condition": { "type": "string" }, "evidence": { "type": "string" }, "expected": { "type": "string" }, "observed": { "type": "string" } } } }
+        }
+      }
+    },
+    "weighted_mean": { "type": "number" },
+    "caps_triggered": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "cap", "evidence"], "properties": { "id": { "type": "string" }, "cap": { "type": "number" }, "evidence": { "type": "string" } } } },
+    "overall": { "type": "number" },
+    "issues": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["severity", "criterion", "where", "problem", "fix"], "properties": { "severity": { "type": "string", "enum": ["blocker", "major", "minor"] }, "criterion": { "type": "string" }, "where": { "type": "string" }, "problem": { "type": "string" }, "fix": { "type": "string" } } } }
+  }
+}

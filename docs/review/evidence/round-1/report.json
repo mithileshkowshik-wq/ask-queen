@@ -1,0 +1,427 @@
+{
+  "round": "1",
+  "date": "2026-11-20T00:18:53.436Z",
+  "passed": 63,
+  "failed": 0,
+  "results": [
+    {
+      "name": "syntax background.js",
+      "ok": true
+    },
+    {
+      "name": "syntax content/chesscom.js",
+      "ok": true
+    },
+    {
+      "name": "syntax content/common.js",
+      "ok": true
+    },
+    {
+      "name": "syntax content/lichess.js",
+      "ok": true
+    },
+    {
+      "name": "syntax content/panel.js",
+      "ok": true
+    },
+    {
+      "name": "syntax options.js",
+      "ok": true
+    },
+    {
+      "name": "manifest_version is 3",
+      "ok": true
+    },
+    {
+      "name": "no remote code (eval / new Function / remote <script>)",
+      "ok": true
+    },
+    {
+      "name": "permission \"storage\" is used",
+      "ok": true
+    },
+    {
+      "name": "info: host_permissions",
+      "ok": true,
+      "detail": [
+        "https://*.hf.space/*"
+      ]
+    },
+    {
+      "name": "cleanSan strips annotations",
+      "ok": true,
+      "detail": {
+        "got": "Nf3",
+        "want": "Nf3"
+      }
+    },
+    {
+      "name": "cleanSan normalizes 0-0+",
+      "ok": true,
+      "detail": {
+        "got": "O-O",
+        "want": "O-O"
+      }
+    },
+    {
+      "name": "cleanSan keeps promotion",
+      "ok": true,
+      "detail": {
+        "got": "e8=Q",
+        "want": "e8=Q"
+      }
+    },
+    {
+      "name": "sameMove ignores check marks",
+      "ok": true,
+      "detail": {
+        "got": true,
+        "want": true
+      }
+    },
+    {
+      "name": "boardFromPieces: side + ep after 1.e4",
+      "ok": true,
+      "detail": {
+        "got": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+        "want": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+      }
+    },
+    {
+      "name": "boardFromPieces: no highlight -> side unknown",
+      "ok": true,
+      "detail": {
+        "got": null,
+        "want": null
+      }
+    },
+    {
+      "name": "background.js defines fixBestMove",
+      "ok": true
+    },
+    {
+      "name": "fixBestMove prefers the move named in the prose",
+      "ok": true,
+      "detail": {
+        "got": "Be7",
+        "want": "Be7"
+      }
+    },
+    {
+      "name": "fixBestMove keeps a structured best move",
+      "ok": true,
+      "detail": {
+        "got": "Nf3",
+        "want": "Nf3"
+      }
+    },
+    {
+      "name": "adapter lichess-analysis: moves",
+      "ok": true,
+      "detail": {
+        "got": [
+          "e4",
+          "e5",
+          "Nf3",
+          "Nc6",
+          "Bc4"
+        ]
+      }
+    },
+    {
+      "name": "adapter lichess-variation: moves",
+      "ok": true,
+      "detail": {
+        "got": [
+          "e4",
+          "e5",
+          "Bc4",
+          "Nf6"
+        ]
+      }
+    },
+    {
+      "name": "adapter lichess-round: moves",
+      "ok": true,
+      "detail": {
+        "got": [
+          "e4",
+          "e5"
+        ]
+      }
+    },
+    {
+      "name": "adapter lichess-custom-fen: moves",
+      "ok": true,
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "adapter lichess-custom-fen: side to move",
+      "ok": true,
+      "detail": {
+        "got": "b"
+      }
+    },
+    {
+      "name": "adapter lichess-board-only: moves",
+      "ok": true,
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "adapter lichess-board-only: side to move",
+      "ok": true,
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "adapter lichess-board-flipped: moves",
+      "ok": true,
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "adapter lichess-board-flipped: side to move",
+      "ok": true,
+      "detail": {
+        "got": "w"
+      }
+    },
+    {
+      "name": "adapter lichess-board-flipped: FEN",
+      "ok": true,
+      "detail": {
+        "got": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 1"
+      }
+    },
+    {
+      "name": "adapter chesscom-review: moves",
+      "ok": true,
+      "detail": {
+        "got": [
+          "e4",
+          "e5",
+          "Nf3",
+          "Nc6",
+          "Bc4"
+        ]
+      }
+    },
+    {
+      "name": "adapter chesscom-board-only: moves",
+      "ok": true,
+      "detail": {
+        "got": null
+      }
+    },
+    {
+      "name": "adapter chesscom-board-only: side to move",
+      "ok": true,
+      "detail": {
+        "got": "b"
+      }
+    },
+    {
+      "name": "adapter chesscom-board-only: FEN",
+      "ok": true,
+      "detail": {
+        "got": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
+      }
+    },
+    {
+      "name": "adapter lichess-no-board: no board -> null",
+      "ok": true,
+      "detail": null
+    },
+    {
+      "name": "lichess: floating button visible",
+      "ok": true
+    },
+    {
+      "name": "lichess: panel opens and names the selected move",
+      "ok": true,
+      "detail": "♛︎\nAsk Queen\nSettings\n×\n3.Bc4\n\nWhite played this. Black is to move.\n\nExplain 3.Bc4\nBest move for Black\nRefresh position\nQUEEN · princeton-nlp/queen_pawn-8 · explanations can be wrong"
+    },
+    {
+      "name": "thinking state shown",
+      "ok": true
+    },
+    {
+      "name": "explain sends the position BEFORE the selected move",
+      "ok": true,
+      "detail": [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4 e5 Nf3 Nc6",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "explain sends the standard start FEN",
+      "ok": true,
+      "detail": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    },
+    {
+      "name": "result: disagreement headline",
+      "ok": true,
+      "detail": "♛︎\nAsk Queen\nSettings\n×\n3.Bc4\n\nWhite played this. Black is to move.\n\nExplain 3.Bc4\nBest move for Black\nRefresh position\n\nWhite, move 3\n\n3.Bc4 was played — Queen prefers 3.Be7\n\nThe explanation is for Queen's move, not the one played.\n\nCritical line\n3...Be7 4.O-O Nf6 5.d3 O-O 6.Nc3 d6 7.Be3\nAnalysis\n\n"
+    },
+    {
+      "name": "result: agreement headline",
+      "ok": true
+    },
+    {
+      "name": "best-move mode sends all moves",
+      "ok": true,
+      "detail": [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4 e5 Nf3 Nc6 Bc4",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "truncated answer: notes the length limit",
+      "ok": true
+    },
+    {
+      "name": "truncated answer: best move repaired from prose (Be7)",
+      "ok": true
+    },
+    {
+      "name": "quota error: plain-language message",
+      "ok": true
+    },
+    {
+      "name": "fallback: primary fails, backup answers",
+      "ok": true,
+      "detail": [
+        "boneyland POST",
+        "hugging-apps POST",
+        "hugging-apps GET"
+      ]
+    },
+    {
+      "name": "game-over error explained",
+      "ok": true
+    },
+    {
+      "name": "model text is escaped (no injected img/script, no execution)",
+      "ok": true,
+      "detail": {
+        "flag": null,
+        "imgs": 0,
+        "bold": true
+      }
+    },
+    {
+      "name": "cancel returns to idle",
+      "ok": true
+    },
+    {
+      "name": "Escape closes the panel",
+      "ok": true
+    },
+    {
+      "name": "lichess analysis: no page errors",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "lichess variation: explain sends correct moves",
+      "ok": true,
+      "detail": [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4 e5 Bc4",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "lichess round view: explain sends correct moves",
+      "ok": true,
+      "detail": [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "lichess custom start: sends the exact FEN, no moves",
+      "ok": true,
+      "detail": [
+        "4k3/8/8/8/8/8/4P3/3K4 b - - 0 1",
+        "",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "side picker shown when side is unknown",
+      "ok": true,
+      "detail": "♛︎\nAsk Queen\nSettings\n×\nPosition on the board\n\nThe move list can't be read here (a variation, puzzle or custom position), so Queen works from the pieces. Castling rights are a guess.\n\nWho is to move?\n\nWhite to play\nBlack to play\nBest move here\nRefresh position\nQUEEN · princeton-nlp/queen_pawn-8 · ex"
+    },
+    {
+      "name": "side picker: chosen side is sent",
+      "ok": true,
+      "detail": [
+        "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 0 1",
+        "",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "chess.com: floating button visible",
+      "ok": true
+    },
+    {
+      "name": "chess.com: panel names 3.Bc4",
+      "ok": true
+    },
+    {
+      "name": "chess.com: explain sends moves before 3.Bc4",
+      "ok": true,
+      "detail": [
+        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        "e4 e5 Nf3 Nc6",
+        2048,
+        0.6,
+        20260823
+      ]
+    },
+    {
+      "name": "chess.com: no page errors",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "no board: button hidden",
+      "ok": true
+    },
+    {
+      "name": "options page renders",
+      "ok": true
+    },
+    {
+      "name": "HF token sent as Bearer to the Space",
+      "ok": true,
+      "detail": [
+        "Bearer hf_testtoken",
+        "Bearer hf_testtoken"
+      ]
+    }
+  ]
+}

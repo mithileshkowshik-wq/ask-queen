@@ -1,0 +1,72 @@
+
+## Static
+PASS  syntax background.js
+PASS  syntax content/chesscom.js
+PASS  syntax content/common.js
+PASS  syntax content/lichess.js
+PASS  syntax content/panel.js
+PASS  syntax options.js
+PASS  manifest_version is 3
+PASS  no remote code (eval / new Function / remote <script>)
+PASS  permission "storage" is used
+INFO  host_permissions: ["https://*.hf.space/*"]
+INFO  content_scripts.matches: [["https://www.chess.com/*","https://lichess.org/*"]]
+
+## Unit
+PASS  cleanSan strips annotations
+PASS  cleanSan normalizes 0-0+
+PASS  cleanSan keeps promotion
+PASS  sameMove ignores check marks
+PASS  boardFromPieces: side + ep after 1.e4
+PASS  boardFromPieces: no highlight -> side unknown
+PASS  background.js defines fixBestMove
+PASS  fixBestMove prefers the move named in the prose
+PASS  fixBestMove keeps a structured best move
+PASS  adapter lichess-analysis: moves
+PASS  adapter lichess-variation: moves
+PASS  adapter lichess-round: moves
+PASS  adapter lichess-custom-fen: moves
+PASS  adapter lichess-custom-fen: side to move
+PASS  adapter lichess-board-only: moves
+PASS  adapter lichess-board-only: side to move
+PASS  adapter lichess-board-flipped: moves
+PASS  adapter lichess-board-flipped: side to move
+PASS  adapter lichess-board-flipped: FEN
+PASS  adapter chesscom-review: moves
+PASS  adapter chesscom-board-only: moves
+PASS  adapter chesscom-board-only: side to move
+PASS  adapter chesscom-board-only: FEN
+PASS  adapter lichess-no-board: no board -> null
+
+## E2E
+PASS  lichess: floating button visible
+PASS  lichess: panel opens and names the selected move
+PASS  thinking state shown
+PASS  explain sends the position BEFORE the selected move
+PASS  explain sends the standard start FEN
+PASS  result: disagreement headline
+PASS  result: agreement headline
+PASS  best-move mode sends all moves
+PASS  truncated answer: notes the length limit
+PASS  truncated answer: best move repaired from prose (Be7)
+PASS  quota error: plain-language message
+PASS  fallback: primary fails, backup answers
+PASS  game-over error explained
+PASS  model text is escaped (no injected img/script, no execution)
+PASS  cancel returns to idle
+PASS  Escape closes the panel
+PASS  lichess analysis: no page errors
+PASS  lichess variation: explain sends correct moves
+PASS  lichess round view: explain sends correct moves
+PASS  lichess custom start: sends the exact FEN, no moves
+PASS  side picker shown when side is unknown
+PASS  side picker: chosen side is sent
+PASS  chess.com: floating button visible
+PASS  chess.com: panel names 3.Bc4
+PASS  chess.com: explain sends moves before 3.Bc4
+PASS  chess.com: no page errors
+PASS  no board: button hidden
+PASS  options page renders
+PASS  HF token sent as Bearer to the Space
+
+63/63 passed, 0 failed in 50 s
