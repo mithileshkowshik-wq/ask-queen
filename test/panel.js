@@ -5,6 +5,8 @@ const F = require("./fixtures");
 const bg = require("../background.js");
 const source = () => read("content/panel.js");
 const settle = () => new Promise(setImmediate);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const bodyOf = (id) => F.SITES[id].html.match(/<body>([\s\S]*)<\/body>/)[1];
 
 async function panelFixture(id, { firstUseSeen = true, mutate = (source) => source } = {}) {
   const s = fixtureDoc(id);
@@ -141,6 +143,40 @@ function runPanelTests(test) {
       assert.throws(() => assertSafeAnalysis(s.element("analysis")), assert.AssertionError);
     } finally { await s.close(); }
   });
+  test("Panel renders 200,000 characters of inline marks: inline() loops and nodes are appended one by one (Fable round 5)", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      await s.open();
+      s.click("best");
+      // Far past the background's 20,000-character cap. The recursive inline() overflowed the stack at 20,000
+      // characters, and append(...nodes) at about 200,000.
+      s.events.message({ result: { ...result, analysis: "\x60a\x60".repeat(66666) + " *the* **end**" } });
+      assert.equal(s.element("out").dataset.state, "result");
+      assert.equal(s.element("analysis").querySelectorAll("code").length, 66666);
+      assert.equal(s.element("analysis").textContent, "a".repeat(66666) + " the end");
+    } finally { await s.close(); }
+  });
+  test("A reply the panel can't render becomes the bad_response error and the panel keeps working (Fable round 5)", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      await s.open();
+      s.click("best");
+      // The renderer's one text sink fails, as it did when a very long reply overflowed the stack.
+      const createTextNode = s.w.document.createTextNode;
+      s.w.document.createTextNode = () => { throw new s.w.RangeError("Maximum call stack size exceeded"); };
+      s.events.message({ result });
+      s.w.document.createTextNode = createTextNode;
+      assert.equal(s.element("out").dataset.state, "error");
+      assert.equal(s.element("out").dataset.code, "bad_response");
+      assert.equal(s.element("headline"), null, "no half-built result");
+      assert.match(s.element("error-details").textContent, /could not be shown: Maximum call stack/);
+      assert.equal(s.element("error-action").textContent, "Try the other server");
+      s.click("error-action");
+      assert.deepEqual(s.calls.map((c) => [c.fresh, c.prefer]), [[false, undefined], [true, "other"]]);
+      s.events.message({ result });
+      assert.match(s.element("headline").textContent, /Queen plays 3\.\.\.Be7/);
+    } finally { await s.close(); }
+  });
   test("Panel rejects clicks after the cursor changes, then flags earlier results stale", async () => {
     const s = await panelFixture("lichess-analysis");
     try {
@@ -177,6 +213,39 @@ function runPanelTests(test) {
       assert.equal(s.calls[1].moves, "e4 e5");
     } finally { await s.close(); }
   });
+  test("A shown result goes stale as soon as the board starts moving; its re-ask comes within 300 ms of the board settling (GPT round 5)", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      const show = (id) => { s.w.document.body.innerHTML = bodyOf(id); };
+      const state = () => ({ reading: !!s.element("reading"), stale: !s.element("stale").hidden, reask: !s.element("stale-reask").hidden,
+        again: !s.element("ask-again").disabled });
+      await s.open();
+      s.click("best");
+      s.events.message({ result });
+      assert.deepEqual(state(), { reading: false, stale: false, reask: false, again: true });
+      show("lichess-animation"); // another position, with its piece still in flight
+      await sleep(300);
+      assert.deepEqual(state(), { reading: true, stale: true, reask: false, again: false });
+      assert.match(s.element("live").textContent, /board has moved/i);
+      assert(s.element("best").disabled && s.element("explain").disabled);
+      show("lichess-start"); // the pieces land on a new position
+      await sleep(300);
+      assert.deepEqual(state(), { reading: false, stale: true, reask: true, again: false });
+      assert.equal(s.element("stale-reask").textContent, "Best move for White");
+      s.click("stale-reask");
+      s.events.message({ result: { ...result, fen: F.START, best: { san: "e4", uci: "e2e4", source: "structured" } } });
+      assert.deepEqual(state(), { reading: false, stale: false, reask: false, again: true });
+      // A piece that moves and lands back on the asked position: stale while it moves, current again afterwards.
+      show("lichess-animation");
+      await sleep(300);
+      assert.deepEqual(state(), { reading: true, stale: true, reask: false, again: false });
+      show("lichess-start");
+      await sleep(300);
+      assert.deepEqual(state(), { reading: false, stale: false, reask: false, again: true });
+      assert.equal(s.element("live").textContent, "");
+      assert.deepEqual(s.calls.map((c) => [c.fen, c.moves]), [[F.START, F.OPENING.join(" ")], [F.START, ""]]);
+    } finally { await s.close(); }
+  });
   test("Live regions exist and are empty before any text is written into them", async () => {
     const s = await panelFixture("lichess-analysis");
     try {
@@ -194,15 +263,57 @@ function runPanelTests(test) {
       assert(region.contains(s.element("headline")));
     } finally { await s.close(); }
   });
-  test("A board-fallback answer has no move numbers in its headline (clocks are unknown)", async () => {
+  test("A board-fallback answer has no move number in its headline, and its critical line is numbered from the asked position", async () => {
     const s = await panelFixture("lichess-board-side");
+    try {
+      const lineFor = (best, criticalLine, fen = F.E4) => {
+        s.click("best");
+        s.events.message({ result: { ...result, fen, best: { san: best, source: "structured" }, criticalLine } });
+        return [s.element("line").textContent, s.element("line-note")?.textContent ?? null];
+      };
+      await s.open();
+      // Black to move: the line counts from this position and says so once.
+      assert.deepEqual(lineFor("e5", "1...e5 2.Nf3 Nc6"), ["1...e5 2.Nf3 Nc6", "Numbered from this position"]);
+      // That is the line the background builds: it numbers a supplied line from the reply's FEN, which has the
+      // placeholder clocks that were sent, whatever numbers the server wrote.
+      const reply = { fen: F.E4, analysis: "Take the centre.", best_move_san: "e5", best_move_uci: "e7e5", move_source: "best_move", critical_line_san: "14...e5 15.Nf3 Nc6" };
+      assert.equal(bg.normalized([reply], "boneyland", s.calls[0], "boneyland", 1).criticalLine, "1...e5 2.Nf3 Nc6");
+      assert.match(s.element("headline").textContent, /\be5\b/);
+      assert.doesNotMatch(s.element("headline").textContent, /\d+\.(?:\.\.)?e5/);
+      assert.match(s.element("out").textContent, /Position on the board \(move numbers unknown\), Black to move/);
+      assert.equal(s.root.querySelectorAll('[data-testid="aq-line-note"]').length, 1);
+      // A reply whose FEN carries other clocks than the placeholders that were sent: those numbers are not shown.
+      assert.deepEqual(lineFor("e5", "14...e5 15.Nf3"), ["e5 Nf3", null]);
+      // White to move.
+      s.click("side-switch");
+      assert.deepEqual(lineFor("d4", "1.d4 d5 2.c4", F.E4.replace(" b ", " w ")), ["1.d4 d5 2.c4", "Numbered from this position"]);
+      assert.equal(s.element("headline").textContent, "Queen plays d4");
+    } finally { await s.close(); }
+    // With the page's exact FEN the clocks are known: real move numbers, no note.
+    const exact = await panelFixture("lichess-custom-start");
+    try {
+      await exact.open();
+      exact.click("best");
+      exact.events.message({ result: { ...result, fen: exact.calls[0].fen, best: { san: "Kd7", source: "structured" }, criticalLine: "42...Kd7 43.Rh7+" } });
+      assert.equal(exact.element("headline").textContent, "Queen plays 42...Kd7");
+      assert.equal(exact.element("line").textContent, "42...Kd7 43.Rh7+");
+      assert.equal(exact.element("line-note"), null);
+    } finally { await exact.close(); }
+  });
+  test("UI copy: one spelling of Queen, the token copy says where it is stored and sent, and the reloaded error says reload once (round 5)", async () => {
+    const options = read("options.html");
+    for (const [file, text] of Object.entries({ "options.html": options, "content/panel.js": source(), "store/promo-tile.html": read("store/promo-tile.html") }))
+      assert.doesNotMatch(text, /QUEEN/, file + " calls the model Queen");
+    assert.match(options, /stored only in this browser/);
+    assert.match(options.replace(/\s+/g, " "), /sent only with your questions, and only to the Queen server being asked\. The built-in servers always get it; a custom server gets it only if you tick the box/);
+    assert.doesNotMatch(options, /every question|stays in this browser/);
+    const s = await panelFixture("lichess-analysis");
     try {
       await s.open();
       s.click("best");
-      s.events.message({ result: { ...result, fen: F.E4, best: { san: "e5", uci: "e7e5", source: "structured" },
-        criticalLine: "1...e5 2.Nf3" } });
-      assert.match(s.element("headline").textContent, /\be5\b/);
-      assert.doesNotMatch(s.element("headline").textContent, /\d+\.(?:\.\.)?e5/);
+      s.events.message({ error: { code: "extension_reloaded" } });
+      assert.doesNotMatch(s.element("error").textContent, /reload/i);
+      assert.equal(s.element("error-action").textContent, "Reload this page");
     } finally { await s.close(); }
   });
   test("Another tab's ask shows its own copy, not the busy-server copy", async () => {
@@ -212,6 +323,57 @@ function runPanelTests(test) {
       s.click("best");
       s.events.message({ error: { code: "busy", detail: "Another tab is already asking Queen.", reason: "other_tab" } });
       assert.match(s.element("error").textContent, /Another tab is already asking Queen/);
+    } finally { await s.close(); }
+  });
+  test("A Retry-After countdown writes nothing while the panel is closed or the tab hidden, and is right when seen again (GPT round 5)", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      let now = Date.now(), writes = 0;
+      s.w.Date.now = () => now; // the panel's clock, so the time left is exact
+      const hide = (hidden) => {
+        Object.defineProperty(s.w.document, "hidden", { value: hidden, configurable: true });
+        s.w.document.dispatchEvent(new s.w.Event("visibilitychange"));
+      };
+      // Every write anywhere in the panel's shadow root during `ms` of real time, with the panel's clock moved on first.
+      const quiet = async (ms, advance) => {
+        const seen = new s.w.MutationObserver((records) => { writes += records.length; });
+        seen.observe(s.root, { subtree: true, childList: true, characterData: true, attributes: true });
+        now += advance;
+        await sleep(ms);
+        seen.disconnect();
+        return writes;
+      };
+      await s.open();
+      s.click("best");
+      s.events.message({ error: { code: "busy", detail: "Queue full", retryAfter: 3 } });
+      const go = s.element("error-action");
+      assert.equal(go.textContent, "Try again in 3 s");
+      assert(go.disabled);
+      // Closed panel in a hidden tab: 1.4 s pass, and the old one-second interval would have rewritten the button.
+      s.element("close").click();
+      await settle();
+      hide(true);
+      assert.equal(await quiet(1300, 1400), 0, "writes while closed and hidden");
+      assert.equal(go.textContent, "Try again in 3 s");
+      hide(false);
+      await s.open();
+      assert.equal(s.element("error-action"), go, "the same error is still there");
+      assert.equal(go.textContent, "Try again in 2 s", "1.6 s left when reopened");
+      assert(go.disabled);
+      // Open panel, hidden tab: nothing either, and the right number the moment the tab is shown.
+      hide(true);
+      assert.equal(await quiet(1300, 800), 0, "writes while open and hidden");
+      hide(false);
+      assert.equal(go.textContent, "Try again in 1 s", "0.8 s left");
+      // Closed past the expiry: reopening shows the plain retry, switched on.
+      s.element("close").click();
+      await settle();
+      assert.equal(await quiet(1300, 1000), 0, "writes while closed");
+      await s.open();
+      assert.equal(go.textContent, "Try again");
+      assert(!go.disabled);
+      s.click("error-action");
+      assert.equal(s.calls.length, 2);
     } finally { await s.close(); }
   });
   test("Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes", async () => {
@@ -228,7 +390,7 @@ function runPanelTests(test) {
         assert(s.element("gate"));
         assert(s.element("out").hidden);
         assert.deepEqual([...s.element("panel").querySelectorAll("button:not([hidden])")].map((b) =>
-          b.getAttribute("aria-label") || b.textContent), ["Close", "Close"]);
+          b.getAttribute("aria-label") || b.textContent), ["Close"]); // one Close: the header's
       } finally { await s.close(); }
     }
   });

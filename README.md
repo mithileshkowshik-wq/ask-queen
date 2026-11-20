@@ -8,7 +8,7 @@ Princeton NLP) for its move and the reasoning behind it.
 Unofficial. Not affiliated with or endorsed by Chess.com, Lichess, Princeton NLP or Hugging Face.
 
 A note on names: QUEEN is the model, and the QUEEN servers are the community-run machines that host it. The panel
-calls the model Queen for short, so text quoted from the panel is spelled that way.
+and Settings call the model Queen for short, so text quoted from them is spelled that way.
 
 ## What it does and doesn't do
 
@@ -118,7 +118,8 @@ panel says **The free quota is used up**. A free Hugging Face token raises that 
 
 What to know about the token:
 
-- It is sent with every question to the QUEEN servers, which are run by community members, not by Hugging Face,
+- It is sent only with your questions, and only to the server being asked: always to a built-in server, and to a
+  custom server only if you ticked the box for it. The servers are run by community members, not by Hugging Face,
   Princeton or this project. That is why it should be read-only and used for nothing else.
 - Once saved, Settings shows only its last four characters (`hf_…abcd`). It is never shown in full again and never
   synced. Web pages, including chess.com and lichess, can't read it.
@@ -206,7 +207,8 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 - **Answers can be wrong**, cut off, or missing a clear move. The panel labels each case.
 - **Standard chess only**, and never during a game.
 - **Working from the pieces is less exact.** Castling rights are guessed from where the kings and rooks stand, and the
-  move number isn't known, so QUEEN's moves are shown without one.
+  move number isn't known, so QUEEN's move is shown without one and its critical line is numbered from the position
+  you asked about.
 - **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise QUEEN works
   from the pieces.
 - **Site changes can break reading.** Both sites change their pages without notice. The extension checks the move list
@@ -219,6 +221,8 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 - [docs/threat-model.md](docs/threat-model.md): what the extension protects, from whom, and what it can't.
 - [docs/perf.md](docs/perf.md): the measured cost of the extension on a page when the panel is closed.
 - [docs/live-checklist.md](docs/live-checklist.md): the owner's checks on the live sites.
+- [docs/a11y-walkthrough.md](docs/a11y-walkthrough.md): what a screen reader is given at each step, with a VoiceOver
+  checklist still to be run.
 - [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 
 ## Licence

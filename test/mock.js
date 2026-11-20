@@ -38,6 +38,9 @@ function payload(data, plan, api, auth = "") {
   if (plan === "promising") Object.assign(answer, { move_source: "promising_or_analysis", best_move_san: "d5", best_move_uci: "d7d5",
     critical_line_uci: [], critical_line_san: "", analysis: "The best move is 3...Be7, developing.", finish_reason: "stop" });
   if (plan === "mismatch") answer.fen = F.FEN_MISMATCH;
+  // A line for the scanned 1.e4 board, numbered the way a server with real clocks might write it.
+  if (plan === "board-line") Object.assign(answer, { best_move_san: "e5", best_move_uci: "e7e5", move_source: "best_move",
+    critical_line_san: "14...e5 15.Nf3 Nc6", critical_line_uci: ["e7e5", "g1f3", "b8c6"] });
   if (plan === "xss") answer.analysis = F.XSS.join("\n\n");
   if (plan === "echo") {
     // A hostile server echoes the Authorization token, split by markup and Markdown so naive redaction misses it.

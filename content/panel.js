@@ -93,6 +93,7 @@ h3 { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
 dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; }
 dt { color: var(--dim); font-size: 13px; }
 dd { font: 15px/1.45 var(--serif); overflow-wrap: anywhere; }
+dd .sub { display: block; font-family: var(--sans); }
 .md { line-height: 1.6; overflow-wrap: anywhere; }
 .md > * + * { margin-top: 10px; }
 .md h4 { margin-top: 16px; color: var(--gold); font-size: 13px; font-weight: 600; }
@@ -132,7 +133,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     game_over: ["The game is over here", "This position is checkmate or stalemate, so there is no move to find.", "Back to the position", "dismiss"],
     bad_response: ["The server's format changed", "Check for an update to Ask Queen.", "Try the other server", "other"],
     cancelled: ["The question was stopped", "It ended before Queen answered.", "Try again", "retry"],
-    extension_reloaded: ["Ask Queen was updated", "Reload this page to keep using it.", "Reload this page", "reload"],
+    extension_reloaded: ["Ask Queen was updated", "This tab is still running the old version, which no longer works.", "Reload this page", "reload"],
     all_unavailable: ["Both servers are unavailable", "Neither of Queen's free servers answered, so try again later or set up your own server.", "Try again", "retry"],
     unknown: ["Queen couldn't answer", "Something unexpected went wrong.", "Try again", "retry"],
   };
@@ -381,6 +382,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     if (port) cancel(); // closing aborts an ask in flight; a finished answer stays for next time
     root.activeElement?.blur();
     panel.hidden = true;
+    countdown(); // stops a retry countdown: nothing is written while the panel is closed
     watch();
     unconfirm(); // the page may have changed while the panel was open
     await showLauncher();
@@ -397,16 +399,14 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const view = dead() ? "reloaded" : gate ? "gated" : prefs.firstUseSeen ? "ask" : "notice";
     panel.dataset.view = view;
     gateText = "";
-    setBtn.hidden = dockBtn.hidden = view === "gated"; // Close is the only action there
+    setBtn.hidden = dockBtn.hidden = view === "gated"; // the header's Close is the only action there
     if (view === "reloaded") { askBox.replaceChildren(); askBox.dataset.state = view; showError({ code: "extension_reloaded" }); }
     else if (view === "gated") {
       cancel(); // abort the ask and remove any answer
       const [title, sub] = GATES[gate] || GATES.unknown_context;
       gateText = `${title}. ${sub}`;
       askBox.dataset.state = `gated-${gate}`;
-      askBox.replaceChildren(
-        h("div", {}, h("h3", { tid: "aq-gate", textContent: title }), h("p", { className: "sub", textContent: sub })),
-        row(h("button", { tid: "aq-gate-close", className: "btn", textContent: "Close", onclick: closePanel })));
+      askBox.replaceChildren(h("div", {}, h("h3", { tid: "aq-gate", textContent: title }), h("p", { className: "sub", textContent: sub })));
     }
     else if (view === "notice") {
       askBox.dataset.state = view;
@@ -420,6 +420,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     else renderAsk();
     if (focus !== null) (askBox.querySelector(`[data-testid="${focus}"]:not(:disabled)`) || panel).focus();
     refreshStale();
+    countdown(); // an error's retry pause, recomputed now that it can be seen
   }
 
   // Board fallback FEN: the page's exact FEN when it has one, otherwise the scan with its disclosed guesses.
@@ -456,7 +457,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     return {
       label: `Best move for ${NAME[side]}`,
       msg: { mode, fen, moves: "", played: null, snapshot: snap(b, side, fen) },
-      // A scanned board has placeholder clocks ("0 1"), so its moves are shown without invented move numbers.
+      // A scanned board has placeholder clocks ("0 1"), so its headline move is shown without an invented move number.
       ctx: { mode, played: null, fromMoves: false, who: side, bare: !b.fen6, lab: (san) => (b.fen6 ? C.moveLabel(san, fen, 0) : san), what: b.fen6 ? "Position on the board" : "Position on the board (move numbers unknown)" },
     };
   }
@@ -512,9 +513,11 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
 
   // --- request ---
   const fill = (el, kids) => el.replaceChildren(...[kids].flat(2).filter(Boolean));
+  let cool = null; // a retry pause the server asked for: { until, go, label }, with `go` the error's retry button
   function show(state, { before, status, timer, alert, after }) {
     const focus = outBox.contains(root.activeElement);
-    clearInterval(retryTimer);
+    cool = null;
+    clearTimeout(retryTimer);
     outBox.dataset.state = state;
     delete outBox.dataset.code;
     fill(pre, before);
@@ -533,8 +536,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   function cancel() {
     reqId++;
     stop();
-    shown = null;
-    clearInterval(retryTimer);
+    shown = cool = null;
+    clearTimeout(retryTimer);
     if (outBox.contains(root.activeElement)) panel.focus();
     outBox.hidden = true;
     for (const el of [pre, statusBox, timerSlot, alertBox, post]) el.replaceChildren();
@@ -601,11 +604,12 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
 
   // --- result ---
   // The board moved after the ask: flag the answer, offer one re-ask for the position now on the board, and
-  // switch off the actions that would repeat the old one.
+  // switch off the actions that would repeat the old one. A board still in motion counts as moved at once; its
+  // re-ask appears when the pieces settle (the next read, at most 250 ms later).
   function refreshStale() {
-    const stale = !!shown?.banner && key(pos) !== shown.ctx.key;
+    const stale = !!shown?.banner && (reading || key(pos) !== shown.ctx.key);
     if (shown?.banner) {
-      const q = stale && (build(shown.ctx.mode) || build("best") || build("explain")); // whichever ask the new position allows
+      const q = stale && !reading && (build(shown.ctx.mode) || build("best") || build("explain")); // whichever ask the new position allows
       shown.banner.hidden = !stale;
       shown.reask.hidden = !q;
       if (q) Object.assign(shown.reask, { textContent: q.label, onclick: () => ask(q.msg.mode) });
@@ -628,8 +632,13 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const verdict = best && played && (agree ? "This is its explanation."
       : `This explains ${C.stripSan(best)}. Queen can't judge ${C.stripSan(played)} directly.`);
     const other = r.truncated && h("button", { tid: "aq-other-server", className: "link", textContent: "Try the other server", onclick: () => again(ctx, { fresh: true, prefer: "other" }) });
-    const line = ctx.bare && typeof r.criticalLine === "string" ? r.criticalLine.replace(/\d+\.(?:\.\.)?\s*/g, "") : r.criticalLine;
-    const facts = [["aq-eval", "Evaluation", r.evaluationText], ["aq-line", "Critical line", line]].filter(([, , v]) => typeof v === "string" && v.trim());
+    // On a scanned board the real move numbers are unknown, so the critical line counts from the asked position
+    // ("1...e5 2.Nf3") and says so. It arrives that way when the reply echoes the placeholder clocks that were sent;
+    // a line numbered any other way has numbers nobody can vouch for, and they are dropped.
+    const counted = !!ctx.bare && /^1\.(?:\.\.)?[^\d\s]/.test(r.criticalLine);
+    const line = ctx.bare && !counted && typeof r.criticalLine === "string" ? r.criticalLine.replace(/\d+\.(?:\.\.)?\s*/g, "") : r.criticalLine;
+    const facts = [["aq-eval", "Evaluation", r.evaluationText], ["aq-line", "Critical line", line, counted && "Numbered from this position"]]
+      .filter(([, , v]) => typeof v === "string" && v.trim());
     const analysis = h("div", { tid: "aq-analysis", className: "md" }, md(r.analysis || "Queen didn't write an explanation this time."));
     const copy = h("button", { tid: "aq-copy-fen", className: "btn", textContent: "Copy FEN", onclick: async () => {
       try { await navigator.clipboard.writeText(r.fen); copy.textContent = "Copied"; } catch { copy.textContent = "Couldn't copy"; }
@@ -647,7 +656,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       verdict && h("p", { tid: "aq-verdict", className: "sub", textContent: verdict }),
       r.best?.source === "prose_verified" && h("p", { tid: "aq-from-text", className: "sub", textContent: "This move was taken from Queen's text." }),
       !best && r.suggestion?.san && h("p", { tid: "aq-suggestion", className: "caveat", textContent: `Queen's text suggests ${ctx.lab(r.suggestion.san)} (unverified)` }),
-      facts.length && h("dl", {}, facts.flatMap(([tid, k, v]) => [h("dt", { textContent: k }), h("dd", { tid, textContent: v })])),
+      facts.length && h("dl", {}, facts.flatMap(([tid, k, v, note]) => [h("dt", { textContent: k }),
+        h("dd", {}, h("span", { tid, textContent: v }), note && h("span", { tid: "aq-line-note", className: "sub", textContent: note }))])),
       analysis,
       row(copy, redo),
       h("p", { tid: "aq-result-footer", className: "raw", textContent: `Answered by ${SERVER[r.server] || "Queen's server"} in ${Math.round(r.seconds) || 0} s${r.cached ? " · cached" : ""}` })],
@@ -682,16 +692,24 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
           h("p", { className: "raw", textContent: `${code}${detail ? `: ${String(detail).slice(0, 500)}` : ""}` }))],
     });
     outBox.dataset.code = code;
-    // The server asked for a pause (Retry-After): the retry button counts down and stays off until then.
-    const until = Date.now() + Math.max(0, Math.ceil(Number(extra("retryAfter")) || 0)) * 1000; // the background sets and caps the pause
-    const countdown = () => {
-      const left = Math.ceil((until - Date.now()) / 1000);
-      go.disabled = left > 0;
-      go.textContent = left > 0 ? `Try again in ${left} s` : label;
-      if (left <= 0) clearInterval(retryTimer);
-    };
-    if (action === "retry" && until > Date.now()) { retryTimer = setInterval(countdown, 1000); countdown(); }
+    const pause = Math.max(0, Math.ceil(Number(extra("retryAfter")) || 0)) * 1000; // the background sets and caps the pause
+    if (action === "retry" && pause) cool = { until: Date.now() + pause, go, label };
+    countdown();
     shown = ctx ? { ctx, error: true } : null;
     refreshStale();
   }
+
+  // The server asked for a pause (Retry-After): the retry button counts down to the expiry kept in `cool` and stays
+  // off until then. The button is written, and the one-second timer runs, only while the error can be seen. Closing
+  // the panel or hiding the tab stops both; opening or showing it again works out the time left afresh.
+  function countdown() {
+    clearTimeout(retryTimer);
+    if (!cool || panel.hidden || document.hidden) return;
+    const ms = cool.until - Date.now(), left = Math.ceil(ms / 1000);
+    cool.go.disabled = left > 0;
+    cool.go.textContent = left > 0 ? `Try again in ${left} s` : cool.label;
+    if (left > 0) retryTimer = setTimeout(countdown, ms - (left - 1) * 1000); // when the number next changes
+    else cool = null;
+  }
+  document.addEventListener("visibilitychange", countdown);
 })();

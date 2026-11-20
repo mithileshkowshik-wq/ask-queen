@@ -301,7 +301,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
           assert.match(await ui("gate").textContent(), expected);
           assert(!await ui("out").isVisible());
           assert(!await ui("best").isVisible());
-          assert(await ui("gate-close").isVisible());
+          // One Close: the header's (GPT round 5).
+          assert.deepEqual(await ui("panel").locator("button:visible").evaluateAll((all) => all.map((b) => b.getAttribute("aria-label") || b.textContent)), ["Close"]);
           await shot(page, state);
           assert.equal(posts(since).length, 0);
         });
@@ -387,6 +388,49 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await output(ui, "result");
         assert.deepEqual(posts(since)[1]?.body.data.slice(0, 2), [START, "f3 e5 g4"]);
         await shot(page, "result-stale-explain");
+      });
+    });
+
+    await test("Browser board-fallback result: no move number in the headline, critical line numbered from the asked position (round 5)", async () => {
+      const { since } = await setup("board-line");
+      await withPage("lichess-board-side", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        assert.equal(posts(since)[0].body.data[0], SITES["lichess-board-side"].expect.fen); // placeholder clocks "0 1"
+        assert.equal(await ui("headline").textContent(), "Queen plays e5");
+        assert.equal(await ui("line").textContent(), "1...e5 2.Nf3 Nc6");
+        assert.equal(await ui("line-note").textContent(), "Numbered from this position");
+        await shot(page, "result-board-line");
+      });
+    });
+
+    await test("Browser result goes stale while the board animates and offers the re-ask within 300 ms of it settling (GPT round 5)", async () => {
+      const { since } = await setup();
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        assert(await ui("ask-again").isEnabled());
+        await navigate(page, "lichess-animation"); // another position, its piece still in flight
+        await sleep(300);
+        assert(await ui("stale").isVisible(), "stale while the board moves");
+        assert(await ui("ask-again").isDisabled());
+        assert(!await ui("stale-reask").isVisible(), "nothing to ask mid-move");
+        // Land on a new position and time, inside the page, how long the re-ask takes to appear.
+        const took = await page.evaluate(({ html, host, reask }) => new Promise((resolve) => {
+          document.body.replaceChildren(...new DOMParser().parseFromString(html, "text/html").body.children);
+          const t0 = performance.now(), button = document.querySelector(host).shadowRoot.querySelector(reask);
+          const look = () => (!button.hidden || performance.now() - t0 > 2000 ? resolve(performance.now() - t0) : setTimeout(look, 5));
+          look();
+        }), { html: SITES["lichess-start"].html, host: selectors.host, reask: selectors["stale-reask"] });
+        assert(took <= 300, "re-ask after " + Math.round(took) + " ms");
+        assert.equal(await ui("stale-reask").textContent(), "Best move for White");
+        assert(await ui("ask-again").isDisabled());
+        await shot(page, "result-stale-settled");
+        await ui("stale-reask").click();
+        await output(ui, "result");
+        assert.deepEqual(posts(since).map((r) => r.body.data.slice(0, 2)), [[START, OPENING.join(" ")], [START, ""]]);
       });
     });
 
@@ -923,6 +967,152 @@ async function runBrowser(extension, temp, out, test, packaged) {
         assert.deepEqual(sent.map((r) => r.auth), [undefined, "Bearer " + token]);
         await shot(page, "result-after-token");
       });
+    });
+
+    await test("Browser options live regions are rendered and empty before their first message, and every message state passes axe (round 5)", async () => {
+      const sw = await worker(ctx);
+      await sw.evaluate(() => chrome.storage.local.remove(["token", "tokenFor", "custom"]));
+      const page = await ctx.newPage();
+      try {
+        await page.goto(new URL("options.html", sw.url()).href);
+        const t = (id) => page.locator(`[data-testid="opt-${id}"]`);
+        const said = (id, text) => until(async () => text.test(await t(id).textContent()));
+        const scan = async (name) => {
+          await page.screenshot({ path: path.join(out, name + ".png"), fullPage: true });
+          assert.deepEqual(seriousOrCritical(await withAxe(page, () => axe.run())), [], name);
+        };
+        // Before any message each region is empty, rendered (not display: none) and in the accessibility tree.
+        const regions = { "token-error": "alert", "token-status": "status", "primary-status": "status", "custom-error": "alert", "custom-status": "status" };
+        for (const [id, role] of Object.entries(regions)) {
+          assert.deepEqual(await t(id).evaluate((el) => [el.getAttribute("role"), el.textContent, el.checkVisibility(), getComputedStyle(el).display !== "none"]),
+            [role, "", true, true], id);
+        }
+        const cdp = await ctx.newCDPSession(page);
+        const { nodes } = await cdp.send("Accessibility.getFullAXTree");
+        await cdp.detach();
+        assert.deepEqual(nodes.filter((n) => !n.ignored && ["alert", "status"].includes(n.role?.value)).map((n) => n.role.value).sort(),
+          Object.values(regions).sort(), "empty regions in the accessibility tree");
+        // Then every message the page can show, each scanned while it is on screen.
+        await t("token-save").click();
+        await said("token-error", /Paste a token first/);
+        await scan("options-token-empty");
+        await t("token").fill("hf_short");
+        await t("token-save").click();
+        await said("token-error", /doesn't look like/);
+        await scan("options-token-error");
+        await t("token").fill("hf_OptionsAxeFixture1234");
+        await t("token-save").click();
+        await said("token-status", /Token saved/);
+        await scan("options-token-saved");
+        await t("primary").selectOption("hugging-apps");
+        await said("primary-status", /Saved/);
+        await t("custom-origin").fill("https://huggingface.co/spaces/someone/queen");
+        await t("custom-save").click();
+        await said("custom-error", /not its huggingface\.co page/);
+        await scan("options-custom-error");
+        await page.evaluate(() => { chrome.permissions.request = async () => true; chrome.permissions.remove = async () => true; });
+        await t("custom-origin").fill("https://queentest.hf.space");
+        await t("custom-save").click();
+        await said("custom-status", /Saved\. Choose it under Server/);
+        assert.match(await t("custom-saved").textContent(), /Your token is not sent to it/);
+        await scan("options-custom-saved");
+        await t("custom-remove").click();
+        await said("custom-status", /Custom server removed/);
+        await t("token-remove").click();
+        await said("token-status", /Token removed/);
+        await scan("options-removed");
+      } finally {
+        await page.close();
+        await sw.evaluate(() => chrome.storage.local.remove(["token", "tokenFor", "custom", "primary"]));
+      }
+    });
+
+    // What a screen reader is given at each step of docs/a11y-walkthrough.md: Chromium's accessibility tree as
+    // Playwright's ARIA snapshot, saved as a11y-tree.txt, with the roles, names and focus moves the doc relies on.
+    await test("Browser accessibility tree for each step of the screen-reader walkthrough", async () => {
+      const tree = [];
+      const snap = async (step, locator) => {
+        const text = await locator.ariaSnapshot();
+        tree.push("## " + step + "\n" + text + "\n");
+        return text;
+      };
+      const focused = (page) => page.evaluate(() => {
+        let el = document.activeElement;
+        while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+        return el?.dataset?.testid || el?.localName;
+      });
+      await setup("busy", { firstUseSeen: false });
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").waitFor();
+        assert.match(await snap("Launcher", ui("launcher")), /^- button "Ask Queen"/);
+        await ui("launcher").focus();
+        await page.keyboard.press("Enter");
+        await ui("notice").waitFor();
+        assert.equal(await focused(page), "aq-panel", "opening moves focus to the dialog");
+        const notice = await snap("First-use notice", ui("panel"));
+        assert.match(notice, /^- dialog "Ask Queen"/);
+        for (const name of ["Move the panel to the left", "Settings", "Close", "Got it"]) assert(notice.includes(`button "${name}"`), name);
+        assert.match(notice, /link "Privacy policy \(opens in a new tab\)"/);
+        await ui("notice-ok").click();
+        assert.equal(await focused(page), "aq-panel");
+        const ask = await snap("Ask", ui("panel"));
+        assert.match(ask, /button "Explain 3\.Bc4"[\s\S]*button "Best move for Black"[\s\S]*button "Read the board again"/);
+        assert.equal(ask.match(/- status/g)?.length, 2, "both status regions are exposed while empty");
+        assert.match(ask, /- alert/, "and the alert region");
+        assert.doesNotMatch(ask, /♛|×|←/, "decorative glyphs are hidden");
+        await ui("best").click();
+        await code(ui, "busy");
+        const error = await snap("Error with a Retry-After pause", ui("panel"));
+        assert.match(error, /- alert:\s+- heading "Queen's servers are busy" \[level=3\]\s+- paragraph: Too many questions/);
+        assert.match(error, /button "Try again in \d+ s" \[disabled\]/);
+        await page.keyboard.press("Escape");
+        await ui("panel").waitFor({ state: "hidden" });
+        assert.equal(await focused(page), "aq-launcher", "closing returns focus to the launcher");
+      });
+      await setup("cancel");
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").focus();
+        await page.keyboard.press("Enter");
+        await output(ui, "thinking");
+        const thinking = await snap("Thinking", ui("panel"));
+        assert.match(thinking, /- status:\s+- paragraph: Queen is thinking…\s+- paragraph: Position after 3\.Bc4, Black to move\s+- paragraph: Usually 15 to 60 seconds\./);
+        assert.doesNotMatch(thinking.match(/- status:[\s\S]*?Usually[^\n]*/)[0], /\d s(?!\w)/, "the seconds are outside the status region");
+        assert.equal(await focused(page), "aq-best", "focus stays on the button that was pressed");
+      });
+      await setup();
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        const result = await snap("Result", ui("panel"));
+        assert.match(result, /- status:\s+- heading "Queen plays 3\.\.\.Be7" \[level=3\]/);
+        assert.match(result, /button "Copy FEN"[\s\S]*button "Ask again"/);
+        await navigate(page, "lichess-start");
+        await ui("stale").waitFor();
+        const stale = await snap("Stale result", ui("panel"));
+        assert.match(stale, /- status: The board has moved\. This answer is for the earlier position\./);
+        assert.match(stale, /button "Ask again" \[disabled\]/);
+        await navigate(page, "lichess-in-progress");
+        await ui("gate").waitFor();
+        const gated = await snap("Gated", ui("panel"));
+        assert.match(gated, /- status: Available after the game ends\./);
+        assert.deepEqual(gated.match(/- button[^\n]*/g), ['- button "Close"']);
+      });
+      const page = await ctx.newPage();
+      try {
+        await page.goto(new URL("options.html", (await worker(ctx)).url()).href);
+        const settings = await snap("Settings", page.locator("body"));
+        assert.match(settings, /heading "Ask Queen settings" \[level=1\]/);
+        for (const name of ["New token", "Space address"]) assert(settings.includes(`textbox "${name}"`), name);
+        for (const name of ["Ask this server first", "It answers like"]) assert(settings.includes(`combobox "${name}"`), name);
+        assert.match(settings, /checkbox "Send my Hugging Face token to this server too" \[disabled\]/);
+        assert.equal(settings.match(/- alert/g)?.length, 2);
+        await page.locator('[data-testid="opt-token-save"]').click();
+        assert.match(await snap("Settings after saving with no token", page.locator("body")), /- alert: Paste a token first\./);
+        assert.equal(await focused(page), "opt-token", "focus goes back to the field");
+      } finally { await page.close(); }
+      fs.writeFileSync(path.join(out, "a11y-tree.txt"), tree.join("\n"));
     });
 
     await test("Browser options render and pass axe", async () => {

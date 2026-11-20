@@ -8,7 +8,7 @@
   It loads no images, no network resources and no scripts.
 - **Renderer:** `node store/make-promo.js`, which opens that page in headless Chromium through the Playwright
   installed for the tests, at a 440×280 viewport and a device scale factor of 1, and saves a screenshot.
-- **Last rendered:** 2026-11-19, with Chromium 158.0.8127.18.
+- **Last rendered:** 2026-11-20, with Chromium 158.0.8127.18.
 
 To render it again after editing the page:
 

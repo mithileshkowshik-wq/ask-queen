@@ -68,13 +68,15 @@
   <section aria-labelledby="token-h">
     <h2 id="token-h">Hugging Face token <small>(optional)</small></h2>
     <p class="help">
-      QUEEN runs on free community GPUs that answer only a few questions per visitor. A free Hugging Face token raises that limit.
+      Queen runs on free community GPUs that answer only a few questions per visitor. A free Hugging Face token raises that limit.
       <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">Create a token on Hugging Face (opens in a new tab)</a>.
     </p>
     <p class="warn" id="token-warn">
-      Your token is sent with every question to the QUEEN servers. They are run by community members, not by Hugging Face,
-      Princeton or this extension's author, and the people who run them could read it. Use a read-only token made just for
-      Ask Queen, with no access to your private models or data, and revoke it on Hugging Face when you no longer need it.
+      Your token is sent only with your questions, and only to the Queen server being asked. The built-in servers always
+      get it; a custom server gets it only if you tick the box for it below. These servers are run by community members,
+      not by Hugging Face, Princeton or this extension's author, and the people who run them could read the token. Use a
+      read-only token made just for Ask Queen, with no access to your private models or data, and revoke it on Hugging
+      Face when you no longer need it.
     </p>
     <p class="saved" id="saved" data-testid="opt-saved-token">No token saved.</p>
     <form id="token-form" novalidate>
@@ -93,7 +95,7 @@
         <span id="token-status" data-testid="opt-token-status" role="status"></span>
       </div>
     </form>
-    <p class="help">The token stays in this browser and is never synced. Once saved it is shown only by its last four characters.</p>
+    <p class="help">The token is stored only in this browser and is never synced. Once saved it is shown only by its last four characters.</p>
   </section>
 
   <section aria-labelledby="server-h">
@@ -113,7 +115,7 @@
   <section aria-labelledby="custom-h">
     <h2 id="custom-h">Custom server <small>(optional)</small></h2>
     <p class="help" id="custom-help">
-      If you run your own copy of a QUEEN Space on Hugging Face, Ask Queen can use it. Chrome will ask you to allow that one
+      If you run your own copy of a Queen Space on Hugging Face, Ask Queen can use it. Chrome will ask you to allow that one
       address, and nothing else.
     </p>
     <p class="saved" id="custom-saved" data-testid="opt-custom-saved">No custom server saved.</p>
