@@ -94,9 +94,9 @@ Result:              read correctly. The move list is used, the side and move nu
 Signed by the owner: Mithilesh Kowshik, 2026-11-19 (in chat)
 ```
 
-### chess.com, 2026-11-19, build 1.0.0 (commit 73f0d99, after fix pass 3): re-check
+### chess.com, 2026-11-19, build 1.0.0 (commit 73f0d99, after fix pass 3): re-check, SIGNED
 
-**Status: reported by the owner in chat; signature pending.** The owner reloaded the extension and Game Review
+**Status: signed by the owner in chat.** The owner reloaded the extension and Game Review
 (`/analysis/game/live/187446826044/review`) and reported: "ask queen still appears and panel shows explain move".
 The owner also captured the live clock and result markup. The review clocks are `div.move-time-time.player-clock`,
 not a running clock. The result is `div.main-line-row.move-list-row.result-row > span.game-result` ("0-1") inside
@@ -109,10 +109,10 @@ Extension version:   1.0.0 (commit 73f0d99)
 Selected move:       a mainline move (not recorded)
 Asked:               panel showed "Explain <move>" (launcher and move list working)
 Expected position:   as in the signed 651b93a record above
-Result:              launcher shown; move list read; Explain offered. The keyboard shortcut did not fire after a
-                     reload. Chrome binds a newly added command's default key only on a fresh install; check
-                     chrome://extensions/shortcuts.
-Signed by the owner: PENDING
+Result:              launcher shown; move list read; Explain offered. KNOWN ISSUE: the keyboard shortcut is bound
+                     (chrome://extensions/shortcuts shows ⌥Q, scope "In Chrome") but pressing it did not open the panel;
+                     under investigation.
+Signed by the owner: Mithilesh Kowshik, 2026-11-19 (in chat: "confirmed 73f0d99 – Mithilesh Kowshik")
 ```
 
 ### lichess (optional)
