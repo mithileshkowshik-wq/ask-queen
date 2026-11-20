@@ -147,11 +147,21 @@ var AQ = globalThis.AQ = { adapters: [] };
   };
 
   // For the closed panel, called about once a second. The full (layout-free) evaluation is cached and redone only when
-  // the URL or the board element changes, or after a click or key press (a game can end by the user's own action),
-  // so a quiet tick costs one querySelector. readPosition() still decides when the panel opens and at click time;
-  // AQ.confirm() is that full read for the moment the gate opens.
+  // the URL or the board element changes, after a click or key press (a game can end by the user's own action), or
+  // after a change in the page's evidence areas, so a quiet tick costs one querySelector. readPosition() still decides
+  // when the panel opens and at click time; AQ.confirm() is that full read for the moment the gate opens.
   let cached = null, dirty = true;
   for (const type of ["pointerdown", "keydown"]) addEventListener(type, () => { dirty = true; }, { capture: true, passive: true });
+  // A result row or game-over element rendered after the board (a page still hydrating) marks it too. Only a change
+  // inside the adapter's evidence areas (move list, result, game over), or one adding or removing such an area, counts,
+  // so clock ticks and chat elsewhere stay quiet. Selector matching only, no layout.
+  const touches = (node, area) => node.nodeType === Node.ELEMENT_NODE && (node.matches(area) || !!node.querySelector(area));
+  new MutationObserver((records) => {
+    const area = AQ.adapters.find((a) => a.host === location.hostname)?.evidence;
+    if (dirty || !area) return;
+    dirty = records.some((r) => !!(r.target.nodeType === Node.ELEMENT_NODE ? r.target : r.target.parentElement)?.closest(area) ||
+      [...r.addedNodes, ...r.removedNodes].some((node) => touches(node, area)));
+  }).observe(document.documentElement, { childList: true, characterData: true, subtree: true });
   AQ.gate = () => {
     const adapter = AQ.adapters.find((a) => a.host === location.hostname);
     const board = adapter ? document.querySelector(adapter.board) : null;

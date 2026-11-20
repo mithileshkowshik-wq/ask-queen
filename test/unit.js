@@ -17,7 +17,9 @@ function fixtureDoc(name, mutate = (name, source) => source) {
   const dom = new JSDOM(f.html, { url: f.url, runScripts: "outside-only" });
   const w = dom.window;
   w.Element.prototype.getBoundingClientRect = function () {
-    if (!this.isConnected || this.closest("[hidden]") || this.style.display === "none") return { width: 0, height: 0 };
+    // As in a browser, an element under a display:none ancestor has no box either.
+    for (let node = this; node; node = node.parentElement) if (node.style?.display === "none") return { width: 0, height: 0 };
+    if (!this.isConnected || this.closest("[hidden]")) return { width: 0, height: 0 };
     const side = Number.parseInt(this.closest(".fixture-board")?.style.getPropertyValue("--size"), 10) || 1;
     return { width: side, height: side };
   };
@@ -25,7 +27,8 @@ function fixtureDoc(name, mutate = (name, source) => source) {
     return this.getBoundingClientRect().width ? [this.getBoundingClientRect()] : [];
   };
   for (const [name, source] of sources) w.eval(mutate(name, source));
-  return { w, f, close: () => w.close() };
+  // Closing empties the document; with no adapters left the gate's MutationObserver ignores that teardown.
+  return { w, f, close: () => { w.AQ?.adapters.splice(0); w.close(); } };
 }
 
 function assertFixture(doc, id) {
@@ -176,7 +179,7 @@ function runUnits(test) {
       } finally { doc.close(); }
     }
   });
-  test("AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it", () => {
+  test("AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it", async () => {
     const doc = fixtureDoc("chesscom-live-tab-review");
     try {
       const { w } = doc, { document } = w;
@@ -188,7 +191,12 @@ function runUnits(test) {
       for (let i = 0; i < 5; i++) w.AQ.gate();
       assert.deepEqual([one, all], [5, 0], "five quiet ticks");
       document.querySelector(".clock-player-turn").remove();
-      document.querySelector("wc-simple-move-list").insertAdjacentHTML("beforeend", '<div class="game-result">1-0</div>');
+      document.querySelector("wc-simple-move-list").insertAdjacentHTML("beforeend", '<div hidden class="game-result">1-0</div>');
+      await new Promise(setImmediate);
+      assert.equal(w.AQ.gate().gate, "in_progress");
+      // An attribute change is not observed: the old answer stays until a trigger.
+      document.querySelector(".game-result").removeAttribute("hidden");
+      await new Promise(setImmediate);
       assert.equal(w.AQ.gate().gate, "in_progress", "no recompute without a trigger (fails closed)");
       document.dispatchEvent(new w.Event("pointerdown"));
       assert.equal(w.AQ.gate().gate, null, "a click marks it for a recompute");
@@ -509,6 +517,75 @@ function runUnits(test) {
     const doc = fixtureDoc("lichess-study", (name, source) => name === "common" ? source.replace(
       'if (C.parseFen(fen)) return { moves, root: { fen, verified: false, source } };', "").replace("if (custom) return null;", "") : source);
     try { assert.throws(() => assertFixture(doc, "lichess-study"), assert.AssertionError); } finally { doc.close(); }
+  });
+
+  // --- Post-round-5 fixes, logic ---
+  test("A 2 MB evaluation or critical line normalizes in under 200 ms and is dropped, not shown (Fable round 5)", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const comments = "<!--".repeat(500000), openers = "<svg".repeat(500000); // 2 MB each
+    const [svg, html, analysis, data] = F.hugging;
+    const huge = [
+      ["evaluation", "boneyland", { evaluation: "White is better " + comments }],
+      ["evaluation", "boneyland", { evaluation: "White is better " + openers }],
+      ["criticalLine", "boneyland", { critical_line_san: "3...Be7 " + comments }],
+      ["criticalLine", "boneyland", { critical_line_san: "3...Be7 4.O-O ".repeat(150000) }],
+      ["criticalLine", "boneyland", { critical_line_san: Array(400000).fill("Be7") }],
+      ["analysis", "boneyland", { analysis: comments }],
+      ["analysis", "boneyland", { analysis: openers }],
+      ["evaluationText", "hugging-apps", { analysis: "EVALUATION: White is better " + comments }],
+      ["criticalLine", "hugging-apps", { critical_line_san: "3...Be7 " + comments }],
+      ["criticalLine", "hugging-apps", { critical_line_san: undefined,
+        critical_line: { ...data.critical_line, legal_steps: Array(400000).fill({ san: "Be7" }) } }],
+    ];
+    for (const [field, api, change] of huge) {
+      const reply = api === "boneyland" ? [{ ...F.boneylandSuccess, ...change }]
+        : [svg, html, change.analysis ?? analysis, { ...data, ...change, analysis: undefined }];
+      const t0 = performance.now();
+      const r = bg.normalized(reply, api, req, api, 1);
+      const ms = performance.now() - t0;
+      assert(ms < 200, `${api} ${field}: ${ms.toFixed(0)} ms`);
+      if (field === "analysis") assert(r.analysis.length <= 20000);
+      else assert.equal(field === "evaluation" ? r.evaluationText : r[field], null, api + " " + field);
+    }
+    // Under the caps nothing changes: a 1,900-character sentence and a 60-move line are kept.
+    const long = "White is better " + "and so on ".repeat(188);
+    const kept = bg.normalized([{ ...F.boneylandSuccess, evaluation: long, critical_line_san: "3...Be7 4.O-O ".repeat(30) + "Nf6" }],
+      "boneyland", req, "boneyland", 1);
+    assert.equal(kept.evaluationText, long.trim());
+    assert.match(kept.criticalLine, /^3\.\.\.Be7 4\.O-O Be7/);
+  });
+  test("A result rendered after the board marks the cached gate for a recompute; other page churn does not (Fable round 5)", async () => {
+    for (const [id, area, html] of [
+      ["chesscom-daily", "wc-simple-move-list", '<div class="game-result">1-0</div>'],
+      ["lichess-round-stray-result", "rm6", '<div class="result-wrap"><p class="result">1-0</p></div>'],
+    ]) {
+      const doc = fixtureDoc(id);
+      try {
+        const { w } = doc, { document } = w, turn = () => new Promise(setImmediate);
+        assert.equal(w.AQ.gate().gate, "in_progress", id);
+        document.body.insertAdjacentHTML("beforeend", '<div class="chat"><span>gg</span></div><div class="clock">4:30</div>');
+        const clock = document.querySelector(".clock").firstChild;
+        await turn();
+        assert.equal(w.AQ.gate().gate, "in_progress", id);
+        let one = 0, all = 0;
+        const q = w.Document.prototype.querySelector, qa = w.Document.prototype.querySelectorAll;
+        w.Document.prototype.querySelector = function (...a) { one++; return q.apply(this, a); };
+        w.Document.prototype.querySelectorAll = function (...a) { all++; return qa.apply(this, a); };
+        clock.data = "4:29";
+        document.querySelector(".chat").append("well played");
+        await turn();
+        one = all = 0;
+        for (let i = 0; i < 3; i++) assert.equal(w.AQ.gate().gate, "in_progress", id + " quiet");
+        assert.deepEqual([one, all], [3, 0], id + ": churn outside the evidence areas leaves the cache");
+        document.querySelector(area).insertAdjacentHTML("beforeend", html);
+        await turn();
+        assert.equal(w.AQ.gate().gate, null, id + ": a late result recomputes with no input");
+        assert.equal(w.AQ.confirm(), true, id);
+        document.querySelector(area).lastElementChild.remove();
+        await turn();
+        assert.equal(w.AQ.gate().gate, "in_progress", id + ": and so does its removal");
+      } finally { doc.close(); }
+    }
   });
 }
 

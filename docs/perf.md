@@ -8,13 +8,14 @@ Ask Queen does almost nothing while its panel is closed. This note records how t
   - the URL changes
   - the board element changes
   - the user clicks or presses a key (two passive listeners just set a flag)
+  - something changes in the page's evidence areas, such as a result row in the move list (a `MutationObserver` that only matches selectors and sets the same flag)
 - A quiet tick is therefore one `document.querySelector` and a string compare. Even a recompute uses only URL checks and cheap selectors.
 - When the gate turns open, the panel calls `AQ.confirm()` before it shows the launcher. This is evidence-only:
   - It re-runs the gate with `el.checkVisibility()` on the few evidence elements: results, clocks, variant badges and game-over elements.
   - `checkVisibility()` reads computed style (display, visibility, content-visibility), not layout.
   - It never scans the board and never calls `getBoundingClientRect` or `getClientRects`.
 - The board scan and other layout reads (`readPosition()`) happen only when the panel opens and when you click Ask.
-- Nothing else touches the site: there are no listeners on site events beyond those two passive flag setters and the key guard, and no writes to the site's DOM or styles.
+- Nothing else touches the site: there are no listeners on site events beyond those two passive flag setters, that observer and the key guard, and no writes to the site's DOM or styles.
 
 ## Measurement
 Two E2E tests cover this:
