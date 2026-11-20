@@ -109,9 +109,10 @@ Extension version:   1.0.0 (commit 73f0d99)
 Selected move:       a mainline move (not recorded)
 Asked:               panel showed "Explain <move>" (launcher and move list working)
 Expected position:   as in the signed 651b93a record above
-Result:              launcher shown; move list read; Explain offered. KNOWN ISSUE: the keyboard shortcut is bound
-                     (chrome://extensions/shortcuts shows ⌥Q, scope "In Chrome") but pressing it did not open the panel;
-                     under investigation.
+Result:              launcher shown; move list read; Explain offered. Keyboard shortcut: bound to ⌥Q in
+                     chrome://extensions/shortcuts (scope "In Chrome"), and it opens the panel. The owner confirmed in
+                     chat: "alt q ... bring up the extension ... that works". The first attempt failed only because
+                     Chrome had not yet bound the new command's default key on the existing install.
 Signed by the owner: Mithilesh Kowshik, 2026-11-19 (in chat: "confirmed 73f0d99 – Mithilesh Kowshik")
 ```
 
