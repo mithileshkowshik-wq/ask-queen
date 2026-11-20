@@ -1,0 +1,613 @@
+{
+  "reviewer": "gpt-6.2-sol",
+  "round": 5,
+  "criteria": [
+    {
+      "id": "C1",
+      "weight": 24,
+      "score": 9.5,
+      "n_met": 2,
+      "n_total_at_next_level": 3,
+      "met": [
+        {
+          "condition": "Level 6. Mainline mid-game",
+          "evidence": "Passing Browser fixture lichess-analysis and Browser fixture chesscom-review. test/browser.js:269 asserts the full outbound root FEN and ordered moves."
+        },
+        {
+          "condition": "Level 6. Start position",
+          "evidence": "Passing Browser fixture lichess-start and Browser fixture chesscom-start."
+        },
+        {
+          "condition": "Level 6. Last move",
+          "evidence": "Passing Browser fixture lichess-final and Browser fixture chesscom-final."
+        },
+        {
+          "condition": "Level 6. Flipped board",
+          "evidence": "Passing Browser fixture lichess-flipped and Browser fixture chesscom-flipped."
+        },
+        {
+          "condition": "Level 6. Board fallback with detected side",
+          "evidence": "Passing Browser fixture lichess-board-side and Browser fixture chesscom-board-side. Both sites also pass the board-ep and board-ep-pinned fixtures with full FEN assertions. content/common.js:54 checks legal capture before setting the square, and content/panel.js:504 discloses an inferred square when sent."
+        },
+        {
+          "condition": "Level 6. Board fallback with side buttons",
+          "evidence": "Passing Browser fixture lichess-board-unknown and Browser fixture chesscom-board-unknown. test/browser.js:266 checks the disabled ask before selection and test/browser.js:269 checks the payload."
+        },
+        {
+          "condition": "Level 9(a). Complete §3.7 fixture matrix",
+          "evidence": "Round 5 has 47 passing lichess and 54 passing chess.com Browser fixture cases. test/fixtures.js:150, test/fixtures.js:214, and test/fixtures.js:267 cover the matrix, including the newly tagged study. test/browser.js:249 checks the expected UI and either the full payload or zero POSTs."
+        },
+        {
+          "condition": "Level 9(b). Strict SAN and whole-list rejection",
+          "evidence": "Passing Strict SAN strips annotations only and never repairs a localized or malformed move, Browser fixture chesscom-localized, and Browser fixture chesscom-inner-space. content/common.js:142 discards the entire list if a token fails."
+        },
+        {
+          "condition": "Level 9(c). Verify the standard root before sending a line",
+          "evidence": "Passing Pre-send checks enforce root-relative capture count, side, footprint and zero-ply placement, Browser fixture lichess-frompos-round, and Browser fixture chesscom-replay-catches. content/common.js:118 requires the replay to agree with the scan before marking the root verified."
+        },
+        {
+          "condition": "Level 9(d). Pre-send cross-check and click-time response verification",
+          "evidence": "Passing Browser fixture chesscom-replay-catches, Browser error mismatch, and With no preceding moves the returned FEN must equal the request root (first-move capture, GPT round 4). background.js:169 compares the first four FEN fields with the replayed request and checks the click-time snapshot. The earlier wrong captured piece is now rejected."
+        },
+        {
+          "condition": "Level 9(d2). Known custom root and preceding SAN sent for Explain",
+          "evidence": "Passing Browser fixture lichess-study-tagged sends the tagged root plus d4 O-O-O for Explain 31.d5. Browser fixture lichess-custom-line and Browser fixture chesscom-tagged-root also pass."
+        },
+        {
+          "condition": "Level 9(e). Board-scan hygiene",
+          "evidence": "Passing Board hygiene rejects impossible boards and ignores ambiguous highlights, A moving piece keeps the board unreadable until it lands, and the mini, animation, user-marked and impossible Browser fixtures on both sites. content/common.js:12 filters previews and content/common.js:73 rejects transient and overlapping scans."
+        },
+        {
+          "condition": "Level 9(f). Fresh click-time read matches the displayed action",
+          "evidence": "Passing Panel rejects clicks after the cursor changes, then flags earlier results stale. content/panel.js:439 builds label and payload together, and content/panel.js:546 rereads before sending."
+        },
+        {
+          "condition": "Level 9(g). Explicit side, source and switch",
+          "evidence": "Passing Browser fixture lichess-board-unknown and Browser fixture chesscom-board-unknown. ask-side-detected.png and content/panel.js:495 show the source and switch."
+        },
+        {
+          "condition": "Level 9(h). All six fields of an exact site FEN survive",
+          "evidence": "Passing Browser fixture lichess-custom-start and Browser fixture lichess-rights-mismatch. content/panel.js:427 preserves the six fields for the detected side."
+        },
+        {
+          "condition": "Level 9(i). Owner's dated live chess.com check",
+          "evidence": "docs/live-checklist.md:76 gives the named owner signature, date, build 1.0.0, selected 15.Nf3, expected pre-move position and copied FEN. The 2026-11-20 check at docs/live-checklist.md:124 adds two Copy FENs for the current runtime commit. I verified that Rg3 replays the first FEN to the second exactly. The coordinator derived the final entry's move labels, so the signed 15.Nf3 entry supplies the complete sign-off."
+        },
+        {
+          "condition": "Level 10. Full SAN replay reproduces the scanned placement",
+          "evidence": "Passing Full SAN replay: legal moves, disambiguation by pins, castling, en passant, promotion, rights and clocks. content/common.js:122 compares every square before accepting the line."
+        },
+        {
+          "condition": "Level 10. Five reviewer-authored realistic adversarial fixtures produce no position mismatches",
+          "evidence": "Five read-only in-memory panel checks used the captured chess.com markup at test/fixtures.js:303 and lila-derived markup at test/fixtures.js:267. A larger flipped preview, a lagging selected row, a localized figurine, a duplicate study ancestor path and a tagged root with conflicting rights all produced the expected full root FEN and ordered SAN or exact-FEN fallback. All five payloads passed background validation."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 10. Chess.com variations read as lines",
+          "evidence": "content/chesscom.js:78 and test/fixtures.js:291.",
+          "expected": "A selected variation is replayed using ancestry that chess.com exposes.",
+          "observed": "The positive fixture supplies synthetic data-parent-node links. Captured chess.com review markup covers mainline moves, and the variation fixture without synthetic links falls back to pieces."
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "weight": 13,
+      "score": 9,
+      "n_met": 0,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 6. Both recorded formats, three deadlines, cancellation, fallback, quota recovery and click-driven requests",
+          "evidence": "Passing Both recorded API shapes normalize with strict move-source precedence and no HTML outputs, Browser streaming mock observes abort on cancel, Browser primary 503 uses the backup and shows its recorded reply, Browser quota recovery: add a token in Settings, then retry on the same page, and First-use notice and only an explicit click sends a request. background.js:262, background.js:271 and background.js:336 set the deadlines."
+        },
+        {
+          "condition": "Level 9. Typed background errors",
+          "evidence": "background.js:10 and the passing Worker error path tests."
+        },
+        {
+          "condition": "Level 9. Transient-only automatic fallback, once",
+          "evidence": "background.js:380 and passing Worker tries backup on a stream with no complete and Browser Timeout: primary aborts at 45 seconds and backup answers."
+        },
+        {
+          "condition": "Level 9. Response schema validation",
+          "evidence": "background.js:131 and passing Browser error bad_response."
+        },
+        {
+          "condition": "Level 9. SSE parser handles arbitrary splits, CRLF and EOF without complete",
+          "evidence": "Passing SSE parser handles arbitrary byte splits, CRLF, Unicode, multi-line data and no complete."
+        },
+        {
+          "condition": "Level 9. One in-flight request per browser and duplicate coalescing",
+          "evidence": "Passing Worker coalesces duplicate asks, splits cancellation, serves the cache, spaces asks and changes fresh seed. background.js:443 enforces one in-flight job."
+        },
+        {
+          "condition": "Level 9. Bounded session cache and fresh-seed bypass",
+          "evidence": "background.js:351, background.js:374 and background.js:390. Passing Browser cache replay and stale result after a cursor change and the worker cache and seed test."
+        },
+        {
+          "condition": "Level 9. 150-second overall deadline and status at 60 seconds",
+          "evidence": "Passing Worker aborts an unresponsive connect at 20 s and an active loop at 150 s overall, and still-waiting.png."
+        },
+        {
+          "condition": "Level 9. Separate Survival and Timeout E2E cases",
+          "evidence": "test/browser.js:510 and test/browser.js:528 run separate real-extension cases with independent mock plans."
+        },
+        {
+          "condition": "Level 9. Survival through 90 seconds of heartbeats",
+          "evidence": "Passing Browser Survival: 90 seconds of heartbeats keep the original worker and attempt alive. test/browser.js:522 verifies the same worker and one primary POST."
+        },
+        {
+          "condition": "Level 9. Silent primary aborted at 45 seconds, with one backup and a bounded timeout",
+          "evidence": "Passing Browser Timeout: primary aborts at 45 seconds and backup times out at 90 s. The backup-success variant also passes."
+        },
+        {
+          "condition": "Level 9. Named failure states including both servers unavailable",
+          "evidence": "Passing Shipped panel renders each typed error with an alert, action and collapsed details, and Browser error all_unavailable. error-all_unavailable.png shows the recovery choices."
+        },
+        {
+          "condition": "Level 9. Custom server and answer attribution",
+          "evidence": "Passing Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent, and Browser primary 503 uses the backup and shows its recorded reply. options.js:99 requests one origin and content/panel.js:654 names the answering server."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 10. Honour and show Retry-After, link custom setup and coalesce two-tab duplicates",
+          "evidence": "background.js:226, content/panel.js:681, and passing Worker caps Retry-After at the panel's 600 s for both header forms.",
+          "expected": "The cooldown and display preserve the server's valid wait interval, with custom setup and cross-tab coalescing available.",
+          "observed": "Custom setup and cross-tab coalescing are implemented. The pass-4 change aligns the display and worker at 600 seconds, but the test explicitly encodes retry a second early for a 601-second header and 50 minutes early for a one-hour HTTP date."
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "weight": 11,
+      "score": 8,
+      "n_met": 8,
+      "n_total_at_next_level": 9,
+      "met": [
+        {
+          "condition": "Level 6. Correct labels and verdicts with caveats",
+          "evidence": "Passing Browser result-agree, Browser result-disagree, Browser result-promising and Browser result-truncated."
+        },
+        {
+          "condition": "Level 9. SAN headline uses the request's move number and side",
+          "evidence": "Passing Browser result-best and Browser fixture lichess-recorded. content/chess.js:266 derives the label from the root and ply. The board-fallback regression verifies that placeholder clocks do not create a headline move number."
+        },
+        {
+          "condition": "Level 9. sameMove normalizes castling, check, mate, glyphs and promotion",
+          "evidence": "content/chess.js:44 and the normalization assertions at test/unit.js:87."
+        },
+        {
+          "condition": "Level 9. Disagreement explains that the played move was not analysed",
+          "evidence": "result-disagree.png and content/panel.js:628 identify which move the explanation covers."
+        },
+        {
+          "condition": "Level 9. Correct source precedence and verdicts limited to verified moves",
+          "evidence": "Passing Prose is confirmed only by the answering provider's own legality field, hugging-apps prose is confirmed by its recorded critical_line.legal_steps object, and Browser result-promising. background.js:143 implements the precedence."
+        },
+        {
+          "condition": "Level 9. Player and opponent map to named sides",
+          "evidence": "background.js:75 and passing Evaluation rows: both real recordings name a side, a sideless sentence is dropped, an equal one names both."
+        },
+        {
+          "condition": "Level 9. Truncation notice and other-server action directly below the headline",
+          "evidence": "result-truncated.png and passing Browser result-truncated. test/browser.js:342 checks the next POST goes to the other server with a fresh seed."
+        },
+        {
+          "condition": "Level 9. Both providers render the same card",
+          "evidence": "Passing Browser fixture lichess-recorded and Browser primary 503 uses the backup and shows its recorded reply. Both use content/panel.js:622."
+        },
+        {
+          "condition": "Level 9. Recorded truncated reply matches §4.5",
+          "evidence": "result-truncated.png shows the required headline, truncation notice and unverified 3...Be7 suggestion. test/browser.js:334 asserts no verdict, evaluation or critical line."
+        },
+        {
+          "condition": "Level 10. Move-source and finish-reason fixtures with screenshots",
+          "evidence": "test/mock.js:25 and test/browser.js:311 exercise best_move, critical_line, random_legal_fallback, promising_or_analysis, stop and length. Round 5 includes result-agree.png, result-best.png, result-from-text.png, result-no-clear-move.png, result-promising.png and result-truncated.png."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 9. Named evaluation and numbered SAN critical line when supplied",
+          "evidence": "background.js:155, content/panel.js:632 and test/panel.js:197. I reproduced the result with the lichess-board-side fixture.",
+          "expected": "Show a supplied critical line in numbered SAN and omit the row only when a line is unavailable.",
+          "observed": "A scanned-board result turns the normalized line 1...e5 2.Nf3 into e5 Nf3. Evaluation handling and omission of absent rows are covered."
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "weight": 10,
+      "score": 8,
+      "n_met": 5,
+      "n_total_at_next_level": 6,
+      "met": [
+        {
+          "condition": "Level 6. Core states have screenshots, next actions, an elapsed timer and a reliability caveat",
+          "evidence": "ask-move.png, thinking.png, result-agree.png and error-quota.png. content/panel.js:233 keeps the caveat visible."
+        },
+        {
+          "condition": "Level 9. Screenshots for every §5.1 state",
+          "evidence": "Round 5 has the direct and navigated gate screenshots, launcher-idle.png, first-use.png, all seven ask states, the three wait states, the eight result states and the typed error states through error-all_unavailable.png and error-extension_reloaded.png. test/browser.js:243, test/browser.js:288, test/browser.js:311 and test/browser.js:473 map those captures."
+        },
+        {
+          "condition": "Level 9. Copy and result order follow §5.2",
+          "evidence": "result-disagree.png, result-truncated.png and ask-game-over.png show the specified disclosures and actions. Passing Worker 'Try the other server' after a bad_response avoids the server that just failed confirms the pass-4 correction. content/panel.js:643 orders the result."
+        },
+        {
+          "condition": "Level 9. First-use notice",
+          "evidence": "first-use.png and passing First-use notice and only an explicit click sends a request."
+        },
+        {
+          "condition": "Level 9. Board and navigation remain usable at the two fixture sizes, or docking is available",
+          "evidence": "Passing Browser overlap or remembered dock at 1280×800 and 1440×900 for lichess-analysis and chesscom-review. The four layout screenshots show the two sites and sizes."
+        },
+        {
+          "condition": "Level 9. Ask in two clicks on a ready board",
+          "evidence": "test/browser.js:324 opens the launcher and selects Explain or Best move. First-use acknowledgement and choosing an unknown side are separate spec states."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 9. Visible stale result and one-action re-ask when the board changes",
+          "evidence": "content/panel.js:325, content/panel.js:509 and content/panel.js:606. Reproduced in memory by stepping from the lichess-analysis position to the lichess-start position during a board animation.",
+          "expected": "Mark the old result stale when the board changes, switch off its repeat action, and offer a one-action re-ask when the new position can be read.",
+          "observed": "At 340 ms the panel said Reading the board and disabled the old main ask buttons. The earlier result still had no stale banner and its Ask again button remained enabled. The stale banner and correct re-ask appeared after the animation settled. A fresh read still guards the request."
+        },
+        {
+          "condition": "Level 10. Display the actual shortcut and pass the copy review",
+          "evidence": "content/panel.js:268, content/panel.js:401, test/panel.js:230 and navigated-in-progress.png.",
+          "expected": "Show the assigned shortcut and present concise, consistent copy with a single Close affordance in a gated state.",
+          "observed": "The footer uses the real binding and the mating-move view removes the earlier repetition. Gated views still provide two identically named Close controls, which the test explicitly expects."
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "weight": 7,
+      "score": 8,
+      "n_met": 8,
+      "n_total_at_next_level": 9,
+      "met": [
+        {
+          "condition": "Level 6. Keyboard flow, focus order, contrast, reduced motion and control names",
+          "evidence": "Passing Browser keyboard-only ask, Escape and site shortcut isolation. content/panel.js:365 and content/panel.js:379 handle focus. content/panel.js:24 and content/panel.js:106 provide contrasting text, visible focus and reduced motion."
+        },
+        {
+          "condition": "Level 9. Thinking and result status, error alert and an unannounced timer",
+          "evidence": "Passing Live regions exist and are empty before any text is written into them. content/panel.js:218 creates the persistent regions and content/panel.js:564 keeps the timer outside status."
+        },
+        {
+          "condition": "Level 9. Escape is scoped to panel focus",
+          "evidence": "Passing Browser keyboard-only ask, Escape and site shortcut isolation includes an Escape press with focus on the site."
+        },
+        {
+          "condition": "Level 9. Panel keys do not trigger site shortcuts",
+          "evidence": "content/keyguard.js:5 and the same keyboard E2E cover page capture and bubble handlers."
+        },
+        {
+          "condition": "Level 9. Control boundaries and focus meet 3:1",
+          "evidence": "content/panel.js:24, content/panel.js:35 and content/panel.js:72. The edge against the raised surface is approximately 4:1 and the focus colour against the panel surface is approximately 9.2:1."
+        },
+        {
+          "condition": "Level 9. Targets are at least 24×24 px",
+          "evidence": "Passing Browser panel and options fit 320x568 with 24 px targets. content/panel.js:54, content/panel.js:71 and content/panel.js:103 size the controls."
+        },
+        {
+          "condition": "Level 9. State conveyed through more than colour",
+          "evidence": "content/panel.js:499 sets side text, a check mark and aria-pressed. ask-side-unknown.png shows the available selections."
+        },
+        {
+          "condition": "Level 9. Layout works at 200% and 320 px",
+          "evidence": "Passing Browser 200% zoom: panel and options fit, keep 24 px targets and work by keyboard, and Browser panel and options fit 320x568 with 24 px targets. test/browser.js:770 emulates the effective 640×400 CSS viewport at device scale 2 and saves 1280×800 CDP captures."
+        },
+        {
+          "condition": "Level 9. Axe scans inside the panel in all displayed states",
+          "evidence": "Passing axe reaches named and deliberately unnamed controls in the panel shadow root and Browser screenshots pass axe in every displayed panel state. test/browser.js:111 proves detection on shipped and planted controls."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 9. Options page has the same state-by-state accessibility evidence",
+          "evidence": "options.html:49, test/browser.js:835 and test/browser.js:906.",
+          "expected": "Keep settings alerts and statuses present before updates and scan the settings states exercised by the token and custom-server workflows.",
+          "observed": "Pass 4 keeps the empty regions rendered. The options workflow exercises validation and save/remove states, but its intermediate states are outside the sole options axe scan, which runs on initial load."
+        },
+        {
+          "condition": "Level 10. Documented screen-reader walkthrough and browser command",
+          "evidence": "manifest.json:9, test/browser.js:393 and docs/live-checklist.md:112.",
+          "expected": "Ship the command and document a screen-reader walkthrough with no blockers.",
+          "observed": "The command, keyboard E2E and owner shortcut check are present. Round 5 has no documented screen-reader walkthrough."
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "weight": 10,
+      "score": 7.5,
+      "n_met": 6,
+      "n_total_at_next_level": 8,
+      "met": [
+        {
+          "condition": "Level 6. Safe text rendering, HTTPS token handling, minimal payload and third-party disclosure",
+          "evidence": "content/panel.js:163 and content/panel.js:416 build text nodes and disclose the recipients. background.js:254 builds the HTTPS request. Passing Browser XSS corpus, network allowlist and isolated-world token denial."
+        },
+        {
+          "condition": "Level 9. Unit and E2E XSS corpus",
+          "evidence": "Passing Shipped result renderer passes hostile strings through the escape-first Markdown subset and Browser XSS corpus, network allowlist and isolated-world token denial. test/fixtures.js:424 defines the corpus."
+        },
+        {
+          "condition": "Level 9. Sender and payload validation",
+          "evidence": "Passing Worker validates the sender and disallows non-top-frame or invalid ask messages and Worker rejects malformed snapshots and lines that don't replay onto the snapshot, with no fetch."
+        },
+        {
+          "condition": "Level 9. Content scripts cannot read the token",
+          "evidence": "background.js:297 restricts storage on startup and install. test/browser.js:570 probes the isolated world. The round 5 token-echo unit and browser checks pass for list, markup, body-only and invisible-character splits."
+        },
+        {
+          "condition": "Level 9. E2E network allowlist",
+          "evidence": "Passing Browser XSS corpus, network allowlist and isolated-world token denial and Browser reports no unexpected requests, uncaught errors, or mock mismatches."
+        },
+        {
+          "condition": "Level 9. First-use third-party notice",
+          "evidence": "first-use.png and content/panel.js:412 disclose the servers, position, moves and token and link the policy."
+        },
+        {
+          "condition": "Level 9. Token removal and guidance",
+          "evidence": "options.html:68, options.js:47 and passing Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 9. Fail-closed fair-play gating matrix",
+          "evidence": "content/chesscom.js:38, test/fixtures.js:192 and test/browser.js:409. I exercised the shipped panel and worker in memory using the daily-game fixture and mocked network.",
+          "expected": "A retained board from a daily game in progress remains gated until the standalone analysis board is established.",
+          "observed": "The pass-4 running-clock case stays gated. With the clockless daily fixture's board still mounted after a route-only change to /analysis, the launcher opened, Best move produced one mocked POST, and the panel rendered a result. The browser regression covers the running-clock case."
+        },
+        {
+          "condition": "Level 9. Privacy policy matches runtime behaviour",
+          "evidence": "PRIVACY.md:105, content/chesscom.js:40 and options.html:74.",
+          "expected": "The documented fair-play scope and token policy accurately describe all supported flows.",
+          "observed": "The privacy policy says the launcher is hidden and nothing is sent during games in progress, which the retained daily-board test contradicts. Settings also says the token is sent with every question even though an unapproved custom origin receives no token."
+        },
+        {
+          "condition": "Level 10. DOM-only renderer, threat model and five unsuccessful reviewer fair-play attempts",
+          "evidence": "content/panel.js:163, docs/threat-model.md:1 and the retained daily-board reproduction at content/chesscom.js:40.",
+          "expected": "Ship the DOM-only renderer and threat model, and deny an answer in all five adversarial mid-game attempts.",
+          "observed": "The renderer and threat model ship. The clockless daily-board case yielded a mocked answer, so the five-attempt requirement cannot pass."
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "weight": 12,
+      "score": 9,
+      "n_met": 0,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 6. Exact required hosts, allowlist packaging and draft release materials",
+          "evidence": "manifest.json:16, scripts/package.sh:1, PRIVACY.md:1 and store/listing.md:49."
+        },
+        {
+          "condition": "Level 9. Tested zip contents and loading from the extracted package",
+          "evidence": "Passing Allowlist zip contains exactly the runtime files and preserves icon dimensions and Extracted allowlist zip loads in Chromium. A read-only comparison matched all 16 archive entries byte for byte to the workspace."
+        },
+        {
+          "condition": "Level 9. Permission justifications",
+          "evidence": "store/permissions.md:6 through store/permissions.md:30 cover storage, built-in hosts, the optional declaration and site access."
+        },
+        {
+          "condition": "Level 9. Data-use answers agree with the privacy disclosures",
+          "evidence": "store/data-use.md:8, store/data-use.md:37 and PRIVACY.md:24 cover credentials, website content, recipients and limited use."
+        },
+        {
+          "condition": "Level 9. Single-purpose statement",
+          "evidence": "store/single-purpose.md:1."
+        },
+        {
+          "condition": "Level 9. Fixture-based store graphics at the required sizes",
+          "evidence": "Inspected chesscom-review-layout-1280.png, result-agree.png and store/promo-440x280.png. The screenshot files are 1280×800 and the logo-free promo tile is 440×280. Provenance is in store/listing.md:58 and store/promo.md:5."
+        },
+        {
+          "condition": "Level 9. Login-free reviewer instructions",
+          "evidence": "store/reviewer-instructions.md:8 starts on the public lichess analysis board and includes quota guidance."
+        },
+        {
+          "condition": "Level 9. Listing states fair-play rules and limits",
+          "evidence": "store/listing.md:36 states the fair-play policy and all required limits, and store/listing.md:49 contains the non-affiliation line."
+        },
+        {
+          "condition": "Level 9. Matching release version",
+          "evidence": "manifest.json:4, CHANGELOG.md:6 and test/run.js:78 agree with dist/ask-queen-1.0.0.zip."
+        },
+        {
+          "condition": "Level 9. License and model attribution",
+          "evidence": "LICENSE:1 and LICENSE:24."
+        },
+        {
+          "condition": "Level 9. Owner tasks cover hosting, account and Space decision",
+          "evidence": "store/OWNER-TODO.md:5, store/OWNER-TODO.md:22 and store/OWNER-TODO.md:43 document the owner steps."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 10. English locale and passing dashboard draft",
+          "evidence": "_locales/en/messages.json:1, test/browser.js:58 and store/OWNER-TODO.md:28.",
+          "expected": "Ship the English locale and provide an owner screenshot of the draft passing the dashboard checks.",
+          "observed": "The locale ships and resolves in the extracted zip. The owner checklist calls for dashboard validation and the screenshot, and round 5 contains no completed dashboard evidence."
+        }
+      ]
+    },
+    {
+      "id": "C8",
+      "weight": 5,
+      "score": 3,
+      "n_met": 0,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 10 component. Measured and documented idle cost below 1 ms per second",
+          "evidence": "Passing Browser closed-panel idle cost stays under 1 ms per second. docs/review/evidence/round-5/perf.json:4 records 0.136 ms/s, and docs/perf.md:19 documents the method."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 6. Layout-free closed checks, no hidden-tab work and one isolated host",
+          "evidence": "content/panel.js:314, content/panel.js:379 and content/panel.js:686. Passing Browser closed launcher ticks make no layout reads, also across a URL change verifies the pass-4 launcher correction.",
+          "expected": "After closing the panel and hiding the tab, the extension stops periodic UI work.",
+          "observed": "The main launcher ticker stops and the ordinary closed tick is layout-free. After a Retry-After error, I closed the panel and hid the fixture tab. The cooldown interval kept rewriting the hidden button from 20 s to 19 s."
+        },
+        {
+          "condition": "Level 9. Open-panel update within 300 ms, site event isolation and stable SPA counts",
+          "evidence": "content/panel.js:320 and content/panel.js:606. Passing Browser ten SPA navigations retain one launcher and stable timer and listener counts and Browser keyboard-only ask, Escape and site shortcut isolation.",
+          "expected": "A board change updates the result and action state within 300 ms, with at most four observer reads per second.",
+          "observed": "During a simulated Lichess cursor change with animation, the reading note and disabled main ask appeared promptly. The old result still lacked a stale marker and retained an enabled Ask again at 340 ms. Normal stale handling resumed after the animation settled."
+        }
+      ]
+    },
+    {
+      "id": "C9",
+      "weight": 8,
+      "score": 9,
+      "n_met": 0,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 6. One documented green unit and two-site fixture command",
+          "evidence": "README.md:168 and test/run.js:101 document and implement the run. Round 5 report.json and log.txt record 442/442 passing. I independently ran 277/277 unit, worker and panel checks in memory. Browser and screenshot results use coordinator evidence because the full runner writes files."
+        },
+        {
+          "condition": "Level 9. Full fixture matrix, XSS, SSE, typed errors, move extraction and real unpacked-extension E2E",
+          "evidence": "Round 5 passes Browser fixture lichess-study-tagged, Browser staggered SPA move to /analysis that keeps the live board and running clock stays gated, and Unpacked extension E2E harness on Chromium. The same report contains the strict move, XSS, SSE fragmentation and worker error tests."
+        },
+        {
+          "condition": "Level 9. Distinct fixture identities asserted before payload",
+          "evidence": "test/fixtures.js:137, test/browser.js:178 and test/panel.js:60."
+        },
+        {
+          "condition": "Level 9. Screenshots generated for every required state",
+          "evidence": "Round 5 evidence includes first-use.png, ask-unreadable.png, still-waiting.png, trying-backup.png, result-truncated.png, result-stale.png, error-all_unavailable.png and error-extension_reloaded.png. State capture is defined at test/browser.js:243, test/browser.js:288, test/browser.js:311 and test/browser.js:473."
+        },
+        {
+          "condition": "Level 9. Axe and keyboard E2E",
+          "evidence": "Passing Browser screenshots pass axe in every displayed panel state, axe reaches named and deliberately unnamed controls in the panel shadow root, and Browser keyboard-only ask, Escape and site shortcut isolation."
+        },
+        {
+          "condition": "Level 9. All three reviewer mutations fail an assertion",
+          "evidence": "Passing Mutation sanity: flipped side parity fails the flipped fixture, Mutation sanity: unconditional standard-root replay fails the custom start fixture, and Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion."
+        },
+        {
+          "condition": "Level 9. README covers the required user and release workflows",
+          "evidence": "README.md:33, README.md:45, README.md:78, README.md:95, README.md:108, README.md:127, README.md:154, README.md:168 and README.md:201 contain the required sections. The package list now includes _locales and the shortcut note covers unbound installations."
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "Level 10. Push CI and a regression for every review-loop fix",
+          "evidence": ".github/workflows/test.yml:2, options.html:49, test/browser.js:835 and test/browser.js:906.",
+          "expected": "Run CI on push and have regressions that distinguish fixed behaviour from the earlier bugs.",
+          "observed": "Push CI and targeted pass-4 regressions for the first-move FEN, the whole launcher tick and the failed-server retry are present. The settings live-region fix lacks an assertion that empty regions remain rendered before the first message. The tracked changelog contains one Fix pass 4 heading at docs/review/CHANGELOG-review.md:153. I verified the UI and documentation changes against the ce55dc9 diff and the round 5 evidence as well."
+        }
+      ]
+    }
+  ],
+  "weighted_mean": 8.4,
+  "caps_triggered": [
+    {
+      "id": "H6",
+      "cap": 5,
+      "evidence": "In a read-only in-memory reproduction, the shipped panel and worker used the unchanged clockless chesscom-daily board from test/fixtures.js:192 after a route-only change to /analysis. content/chesscom.js:38 accepted the retained board, and clicking Best move produced one mocked QUEEN POST and a rendered result. This was a simulated SPA transition. The live-check entry does not independently verify this transition."
+    },
+    {
+      "id": "H9",
+      "cap": 6.9,
+      "evidence": "C8 scores 3, below 5."
+    },
+    {
+      "id": "H9",
+      "cap": 8.5,
+      "evidence": "C8 scores 3, below 7."
+    },
+    {
+      "id": "H9",
+      "cap": 8.9,
+      "evidence": "C3 scores 8, below 9."
+    }
+  ],
+  "overall": 5,
+  "issues": [
+    {
+      "severity": "blocker",
+      "criterion": "C6",
+      "where": "content/chesscom.js:25, content/common.js:155 and test/browser.js:409",
+      "problem": "Standalone analysis opens on a retained in-progress daily board without a running-clock marker. The fixture reproduction completes an ask through the worker and renders the result.",
+      "fix": "Require positive analysis evidence tied to the currently mounted main board and move list. Keep the gate closed while the previous game board remains mounted. Add a staggered daily-game fixture that asserts hidden UI and zero POSTs until the analysis board is ready."
+    },
+    {
+      "severity": "major",
+      "criterion": "C8",
+      "where": "content/panel.js:347, content/panel.js:379 and content/panel.js:686",
+      "problem": "A Retry-After countdown continues to update the panel after it is closed and the tab is hidden.",
+      "fix": "Keep the cooldown expiry in state and stop the display interval on close or hide. Recompute and resume the countdown when the error is visible. Test that a closed panel in a hidden tab performs no countdown writes."
+    },
+    {
+      "severity": "major",
+      "criterion": "C4, C8",
+      "where": "content/panel.js:325 and content/panel.js:606",
+      "problem": "Stepping to a different position during an animation disables the main ask buttons but leaves the previous result current and its Ask again action enabled beyond the update budget.",
+      "fix": "Mark the prior result stale or pending as soon as a changed board enters the reading state. Disable its result actions and offer the new re-ask once the board settles. Add a regression that starts with a displayed result."
+    },
+    {
+      "severity": "major",
+      "criterion": "C3",
+      "where": "content/panel.js:632 and test/panel.js:197",
+      "problem": "The scanned-board renderer strips every move number from a supplied critical line.",
+      "fix": "Keep numbered SAN in the critical line and label its numbering as relative to the asked position when historical clocks are unknown. Keep the main headline free of placeholder move numbers."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C2",
+      "where": "background.js:226 and test/worker.js:209",
+      "problem": "Valid Retry-After durations over 600 seconds are shortened.",
+      "fix": "Keep the full server expiry and use that expiry for display and eligibility. Exercise a longer delta-seconds header and a longer HTTP-date header."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C1",
+      "where": "content/chesscom.js:78 and test/fixtures.js:296",
+      "problem": "Chess.com variation replay depends on ancestry attributes that only the synthetic fixture demonstrates.",
+      "fix": "Capture actual subline markup from Game Review or Analysis. Implement and test the ancestry it exposes with full outbound assertions, while preserving the visible fallback where ancestry is unavailable."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C5, C9",
+      "where": "options.html:49 and test/browser.js:906",
+      "problem": "The options axe evidence covers initial load, and the live-region fix has no regression for the region remaining rendered before its first message.",
+      "fix": "Assert that initially empty options alerts and statuses remain exposed, scan validation and save/remove states, and document the screen-reader walkthrough."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C4",
+      "where": "content/panel.js:231 and content/panel.js:410",
+      "problem": "Gated views expose two Close controls with the same action.",
+      "fix": "Keep one visible Close action in gated views and update the navigation assertion."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C6",
+      "where": "options.html:74",
+      "problem": "The token warning says the credential accompanies every question even when the selected custom server has no token consent.",
+      "fix": "State that a saved token accompanies built-in server requests and accompanies custom requests only with explicit approval for that origin."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C7",
+      "where": "store/OWNER-TODO.md:28",
+      "problem": "The required level-10 evidence of successful dashboard checks is missing.",
+      "fix": "Record the version and attach an owner screenshot of the Chrome Web Store dashboard passing the draft checks."
+    }
+  ]
+}

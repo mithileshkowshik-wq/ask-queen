@@ -1,0 +1,617 @@
+{
+  "reviewer": "fable-5.2",
+  "round": 5,
+  "criteria": [
+    {
+      "id": "C1",
+      "weight": 24,
+      "score": 9.5,
+      "n_met": 2,
+      "n_total_at_next_level": 3,
+      "met": [
+        {
+          "condition": "Level 6: both sites pass fixture tests on the full outbound request (mainline, start, last move, flipped, fallback with side detected, fallback with side buttons); variation and custom-start pages work or fall back visibly",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Panel fixture\" and \"Browser fixture\" for {lichess,chesscom}-{analysis|review,start,final,flipped,board-side,board-unknown,variation,custom-start}; the request is asserted at test/panel.js:83-86 (fen, moves, validAsk) and test/browser.js:272 (POST body)"
+        },
+        {
+          "condition": "9(a) §3.7 matrix, at least 12 fixtures per site, asserted by fixture type",
+          "evidence": "docs/review/evidence/round-5/report.json: 47 \"Adapter fixture lichess-*\" and 54 \"Adapter fixture chesscom-*\" pass, each also as \"Panel fixture\" and \"Browser fixture\" (101 browser fixtures). Sending fixtures assert root FEN plus ordered SAN; gated and unreadable ones assert the UI and zero POSTs (test/browser.js:253-283)"
+        },
+        {
+          "condition": "9(b) strict SAN, any failing token discards the list",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Strict SAN strips annotations only and never repairs a localized or malformed move\", \"Adapter fixture chesscom-localized\", \"Adapter fixture chesscom-inner-space\"; content/chess.js:6,44-45"
+        },
+        {
+          "condition": "9(c) never replayed from the standard start unless verified",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Mutation sanity: unconditional standard-root replay fails the custom start fixture\", \"Adapter fixture lichess-study\", \"lichess-frompos-round\", \"lichess-inline-custom\", \"lichess-column-black-first\", \"chesscom-row-number\"; content/common.js:142-147. My own in-memory mutations of lichess.js and chesscom.js (root always standard) were both caught by the fixture assertions"
+        },
+        {
+          "condition": "9(d) pre-send cross-check and post-response fen check both run; the post-response check uses the click-time snapshot; a mismatch falls back visibly",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Pre-send checks enforce root-relative capture count, side, footprint and zero-ply placement\", \"Background checks the returned FEN against the replayed line, rights and en passant included\", \"With no preceding moves the returned FEN must equal the request root (first-move capture, GPT round 4)\", \"Browser error mismatch\"; background.js:170-179; error-mismatch.png"
+        },
+        {
+          "condition": "9(d2) custom-start Explain sends the exposed root plus the moves",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser fixture lichess-custom-line\", \"Browser fixture lichess-study-tagged\", \"Browser fixture lichess-frompos-analysis\", \"Browser fixture chesscom-tagged-root\""
+        },
+        {
+          "condition": "9(e) board-scan hygiene",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Board hygiene rejects impossible boards and ignores ambiguous highlights\", \"A moving piece keeps the board unreadable until it lands\", \"Browser fixture {lichess,chesscom}-{animation,impossible,user-marked,mini}\", \"chesscom-marks-only\", \"chesscom-mixed-highlights\"; content/common.js:73-85"
+        },
+        {
+          "condition": "9(f) request rebuilt from a fresh read at click time and matches the label",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Panel rejects clicks after the cursor changes, then flags earlier results stale\", \"A click on another line's move while an ask is in flight cancels it and asks about the new move\"; content/panel.js:439-463, 546-550"
+        },
+        {
+          "condition": "9(g) side never silently defaulted; source shown with a one-click switch",
+          "evidence": "ask-side-detected.png (\"Black to move (detected from the last move)\", \"Switch to White\"), ask-side-unknown.png; content/panel.js:495-504; docs/review/evidence/round-5/report.json: \"Browser fixture lichess-board-unknown\" (Best disabled until a side is chosen)"
+        },
+        {
+          "condition": "9(h) exact site FENs keep all six fields",
+          "evidence": "docs/review/evidence/round-5/report.json: \"FEN parser preserves all six fields and rejects malformed ranks and clocks\", \"Browser fixture lichess-custom-start\" (sends \"4k3/8/8/8/8/8/8/4K2R b - - 17 42\"), \"Browser fixture lichess-rights-mismatch\""
+        },
+        {
+          "condition": "9(i) the owner's dated live chess.com check is recorded",
+          "evidence": "docs/live-checklist.md:76-95: build 1.0.0 at 651b93a, dated 2026-11-19, signed by the owner by name in chat, selected move 15.Nf3, Explain, expected position described, copied FEN (fields transcribed by the coordinator from the owner's screenshot and copied FEN). docs/live-checklist.md:124-151: final commit ce55dc9, dated 2026-11-20, version 1.0.0; the shipped code is unchanged since (git diff ce55dc9..aebcc70 touches only docs/). OWNER-REPORTED there: the two Copy FEN strings and \"everything looks good\". COORDINATOR-DERIVED there: the selected move 29.Rg3, which button produced which FEN, and both \"matches\" verdicts. I confirmed AQChess.replay(first FEN, [\"Rg3\"]) equals the second FEN. That record has no named signature line, and the in-progress and Alt+Q checks have no individual result"
+        },
+        {
+          "condition": "10: a full SAN replay reproduces the scanned placement exactly",
+          "evidence": "content/chess.js:221-264, content/common.js:118-133; docs/review/evidence/round-5/report.json: \"Full SAN replay: legal moves, disambiguation by pins, castling, en passant, promotion, rights and clocks\", \"Browser fixture chesscom-replay-catches\""
+        },
+        {
+          "condition": "10: zero mismatches on 5 reviewer-written adversarial fixtures (lila-derived or recorded markup)",
+          "evidence": "Run in memory through the shipped adapters and panel (test/panel.js panelFixture), nothing written to the repo: (1) lila analysis with the ceval PV hover board (div.pv-board > .cg-wrap, no mini class, larger than the main board); (2) a transposition where the selected variation keeps castling rights and the mainline loses them, both ways; (3) recorded chess.com Game Review list one ply ahead of the board (falls back with the \"disagree\" note and sends the board on screen); (4) recorded chess.com markup with \"bxa8=<figurine Q>\" and padded text; (5) lila round view, flipped board, fractional square size, Black O-O-O highlighted as e8/a8. All 10 asks sent the position on screen (or the position before the labelled move)"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: chess.com variations read as lines",
+          "evidence": "content/chesscom.js:85-102; test/fixtures.js:291-300; README.md:210-211",
+          "expected": "Selecting a move inside a chess.com sub-line, on recorded live markup, sends the root plus that line (Explain available).",
+          "observed": "A line is read only when nodes carry data-parent-node, which exists only in the synthetic fixture chesscom-variation-ancestry and in no captured chess.com markup. With the recorded-style .variation container (fixture chesscom-variation) the adapter drops to the board fallback and offers Best move only."
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "weight": 13,
+      "score": 10,
+      "n_met": 3,
+      "n_total_at_next_level": 3,
+      "met": [
+        {
+          "condition": "Level 6: both recorded shapes parse; connect, idle and overall timeouts; cancel aborts; fallback; quota leads to token setup; nothing sent without a click",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Both recorded API shapes normalize with strict move-source precedence and no HTML outputs\", \"Worker aborts an unresponsive connect at 20 s and an active loop at 150 s overall\", \"Browser streaming mock observes abort on cancel\", \"Browser primary 503 uses the backup and shows its recorded reply\", \"Browser error quota\", \"First-use notice and only an explicit click sends a request\""
+        },
+        {
+          "condition": "9: typed error codes assigned in the background",
+          "evidence": "background.js:10-40; docs/review/evidence/round-5/report.json: \"All background codes have a fixture, with same/different/permanent fallback precedence\", \"Worker error path: quota|token_rejected|busy|illegal_position|game_over|bad_response|unreachable|asleep|all_unavailable\""
+        },
+        {
+          "condition": "9: fallback only on transient classes, at most once per ask",
+          "evidence": "background.js:9, 381-406; docs/review/evidence/round-5/report.json: \"Worker error path: quota after fallback\", \"Worker treats 401 without a token as a dead server and tries the backup\", \"Worker tries backup on a stream with no complete\""
+        },
+        {
+          "condition": "9: schema validation, unknown shape gives bad_response",
+          "evidence": "background.js:136-140; docs/review/evidence/round-5/report.json: \"Worker error path: bad_response\", \"Worker refuses malformed event IDs and redirects before issuing any follow-on request\""
+        },
+        {
+          "condition": "9: SSE parser tested with arbitrary splits, CRLF and no complete",
+          "evidence": "docs/review/evidence/round-5/report.json: \"SSE parser handles arbitrary byte splits, CRLF, Unicode, multi-line data and no complete\""
+        },
+        {
+          "condition": "9: one request in flight per browser, duplicate clicks coalesced",
+          "evidence": "background.js:443-452, content/panel.js:553; docs/review/evidence/round-5/report.json: \"Worker coalesces duplicate asks, splits cancellation, serves the cache, spaces asks and changes fresh seed\", \"Worker tells a second tab that another tab is already asking\""
+        },
+        {
+          "condition": "9: bounded session cache, Ask again bypasses it with a new seed",
+          "evidence": "background.js:350-358, 374-379, 390-393; docs/review/evidence/round-5/report.json: same \"Worker coalesces…\" test, \"Browser cache replay and stale result after a cursor change\"; result-cached.png"
+        },
+        {
+          "condition": "9: overall deadline of 150 s or less, still waiting at 60 s",
+          "evidence": "background.js:336, 340; docs/review/evidence/round-5/report.json: \"Worker survives 90 s of bytes, including heartbeat and partial lines, with keepalives and 60 s status\"; still-waiting.png"
+        },
+        {
+          "condition": "9: Survival E2E",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser Survival: 90 seconds of heartbeats keep the original worker and attempt alive\" (one POST, same worker, answer after at least 89 s)"
+        },
+        {
+          "condition": "9: Timeout E2E",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser Timeout: primary aborts at 45 seconds and backup times out at 90 s\", \"Browser Timeout: primary aborts at 45 seconds and backup answers\"; error-timeout.png"
+        },
+        {
+          "condition": "9: every failure lands in a named state, including both servers unavailable",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Shipped panel renders each typed error with an alert, action and collapsed details\", \"Browser error all_unavailable\", \"Browser port state cancelled\", \"Browser port state extension_reloaded\"; error-*.png (13 files)"
+        },
+        {
+          "condition": "9: configurable custom server through an optional host permission; the result names the server that answered",
+          "evidence": "options.js:86-111; docs/review/evidence/round-5/report.json: \"Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent\", \"Custom origin grants and token consent are checked independently, and other uses the other server\"; footer \"Answered by boneyland/queen-pawn-8\" in result-disagree.png"
+        },
+        {
+          "condition": "10: Retry-After honoured and shown",
+          "evidence": "background.js:226-232, 359-366, 398; docs/review/evidence/round-5/report.json: \"Worker keeps a Retry-After cooldown for every ask and tab, then asks again\", \"Worker caps Retry-After at the panel's 600 s for both header forms\", \"Browser error busy\"; error-busy.png (\"Try again in 20 s\", disabled)"
+        },
+        {
+          "condition": "10: both-servers-unavailable state links to custom-server setup",
+          "evidence": "content/panel.js:681; error-all_unavailable.png (\"Set up a custom server\")"
+        },
+        {
+          "condition": "10: duplicate asks from two tabs produce one GPU job",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Worker coalesces duplicate asks, splits cancellation, serves the cache, spaces asks and changes fresh seed\" (second ask from tab 2 joins; one POST), \"Worker keys the cache and coalescing on the snapshot's exact rights\""
+        }
+      ],
+      "unmet": []
+    },
+    {
+      "id": "C3",
+      "weight": 11,
+      "score": 10,
+      "n_met": 1,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 6: labels and the agree/disagree verdict are correct; caveats for weak sources and truncation",
+          "evidence": "result-agree.png, result-disagree.png, result-truncated.png, result-from-text.png; content/panel.js:624-631, 646-650"
+        },
+        {
+          "condition": "9: best move shown in SAN with the correct number and side",
+          "evidence": "content/panel.js:451, 627-628 (labels from the request through AQChess.moveLabel); docs/review/evidence/round-5/report.json: \"Browser result-best\" (/Queen plays 3\\.\\.\\.Be7/), \"Browser fixture lichess-recorded\" (4.Nxe5)"
+        },
+        {
+          "condition": "9: sameMove normalizes castling, check and mate marks, glyphs and promotion",
+          "evidence": "content/chess.js:46-50; docs/review/evidence/round-5/report.json: \"Strict SAN strips annotations only and never repairs a localized or malformed move\" (0-0!? vs O-O+, e8Q vs e8=Q#)"
+        },
+        {
+          "condition": "9: on disagreement the copy says the played move was not analysed",
+          "evidence": "result-disagree.png (\"This explains Bb5. Queen can't judge Bc4 directly.\"); content/panel.js:629-630"
+        },
+        {
+          "condition": "9: source precedence; only a verified move is the headline or drives the verdict; unverified prose only as a suggestion; random fallback never Queen's",
+          "evidence": "background.js:142-153; docs/review/evidence/round-5/report.json: \"Prose is confirmed only by the answering provider's own legality field\", \"hugging-apps prose is confirmed by its recorded critical_line.legal_steps object\", \"SAN/UCI matching checks the piece, square, disambiguation and promotion\", \"Browser result-promising\", \"Browser result-no-clear-move\"; result-promising.png"
+        },
+        {
+          "condition": "9: evaluation names a side, critical line is numbered SAN, missing rows are left out",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Evaluation rows: both real recordings name a side, a sideless sentence is dropped, an equal one names both\", \"The real boneyland recording normalizes with its evaluation sentence and a numbered line\"; result-evaluation.png; \"Browser result-truncated\" asserts no eval and no line row. Note: on a scanned board with unknown clocks the line is shown without numbers and the context says \"(move numbers unknown)\" (content/panel.js:461, 632); I count that as correct labelling, not a miss"
+        },
+        {
+          "condition": "9: the player / the opponent mapped to White/Black",
+          "evidence": "background.js:76-84; docs/review/evidence/round-5/report.json: \"Provider text drops well-formed HTML, SVG and model tokens but keeps a lone '<'\" (\"The player's knight\" becomes \"White's knight\")"
+        },
+        {
+          "condition": "9: truncation flagged directly under the headline with Try the other server",
+          "evidence": "result-truncated.png; content/panel.js:631, 646; docs/review/evidence/round-5/report.json: \"Browser result-truncated\" (second POST goes to hugging-apps with a new seed)"
+        },
+        {
+          "condition": "9: both Space formats render the same card",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Both recorded API shapes normalize with strict move-source precedence and no HTML outputs\", \"Browser primary 503 uses the backup and shows its recorded reply\""
+        },
+        {
+          "condition": "9: the recorded truncated reply renders the exact §4.5 card",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser result-truncated\"; result-truncated.png (headline \"Queen didn't name a clear move\", \"The answer was cut off.\" + \"Try the other server\", \"Queen's text suggests 3...Be7 (unverified)\", no verdict, no evaluation row, no line row)"
+        },
+        {
+          "condition": "10: a regression fixture for every move_source value and both finish_reason values, each with a screenshot",
+          "evidence": "best_move: result-disagree.png, result-agree.png; critical_line: result-best.png; random_legal_fallback: result-from-text.png, result-no-clear-move.png; promising_or_analysis: result-promising.png; finish_reason length: result-truncated.png; stop: the others. docs/review/evidence/round-5/report.json: \"Browser result-*\" (7 tests); test/mock.js:32-43"
+        }
+      ],
+      "unmet": []
+    },
+    {
+      "id": "C4",
+      "weight": 10,
+      "score": 9.5,
+      "n_met": 1,
+      "n_total_at_next_level": 2,
+      "met": [
+        {
+          "condition": "Level 6: ask, thinking (with elapsed time), result and error states each have a next action and a screenshot; \"Explanations can be wrong\" is visible",
+          "evidence": "ask-move.png, thinking.png, result-best.png, error-quota.png; footer text at content/panel.js:233 visible in every screenshot"
+        },
+        {
+          "condition": "9: every §5.1 state has a screenshot",
+          "evidence": "docs/review/evidence/round-5/: no-board, direct-in-progress, direct-variant, direct-puzzle, navigated-in-progress, navigated-variant, launcher-idle, first-use, ask-move, ask-start, ask-side-detected, ask-side-unknown, ask-disagree, ask-unreadable, ask-game-over, thinking, still-waiting, trying-backup, result-agree, result-disagree, result-best, result-from-text, result-no-clear-move, result-truncated, result-cached, result-stale, and error-<code>.png for all 12 codes"
+        },
+        {
+          "condition": "9: the §5.2 copy rules are followed",
+          "evidence": "content/panel.js:125-145 (one headline, one sentence, one primary action, collapsed Details), 449 and 458 (buttons name the ask), 643-655 (result order); result-disagree.png; test/browser.js:368-370 asserts the order"
+        },
+        {
+          "condition": "9: a first-use notice is shown",
+          "evidence": "first-use.png; docs/review/evidence/round-5/report.json: \"First-use notice and only an explicit click sends a request\""
+        },
+        {
+          "condition": "9: a result is marked stale when the board moves, with a one-action re-ask",
+          "evidence": "result-stale.png, result-stale-explain.png; docs/review/evidence/round-5/report.json: \"Browser cache replay and stale result after a cursor change\", \"Browser stale Best result whose new position only allows Explain re-asks with Explain\""
+        },
+        {
+          "condition": "9: the panel covers neither board nor move navigation at 1280×800 and 1440×900, or can be docked in one action that is remembered",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser overlap or remembered dock at 1280×800 and 1440×900 for lichess-analysis\", \"… for chesscom-review\"; *-layout-1280.png, *-layout-1440.png"
+        },
+        {
+          "condition": "9: the board is asked about in 2 clicks or fewer",
+          "evidence": "Launcher, then Explain or Best move: test/browser.js:324-326"
+        },
+        {
+          "condition": "10: a keyboard shortcut shown in the UI",
+          "evidence": "content/panel.js:228, 266-277 (the real binding from the background, in platform notation); docs/review/evidence/round-5/report.json: \"Browser Alt+Q command message opens the panel, and the shortcut is shown\"; the ⌥Q key cap in every panel screenshot"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: a copy review that finds no redundant sentences and consistent terms throughout",
+          "evidence": "options.html:96 next to options.html:75; options.html:71,75,116 against content/panel.js:126-137,233; store/promo-tile.html:25,29; content/panel.js:135",
+          "expected": "No sentence contradicts or repeats another, and one name is used for the same thing across the panel, Settings and the promo tile.",
+          "observed": "Settings says \"The token stays in this browser and is never synced\" two paragraphs below \"Your token is sent with every question to the QUEEN servers\" (it means stored only in this browser). The panel says Queen (\"Queen's free servers\") while Settings and the promo tagline say QUEEN (\"the QUEEN servers\"); the convention is explained only in README.md:10-11. The reloaded error says \"Reload this page\" in both its sentence and its button."
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "weight": 7,
+      "score": 9.5,
+      "n_met": 1,
+      "n_total_at_next_level": 2,
+      "met": [
+        {
+          "condition": "Level 6: whole flow by keyboard with visible focus; focus into the panel on open and the §6 close order; 4.5:1 text; reduced motion; every control named",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser keyboard-only ask, Escape and site shortcut isolation\"; content/panel.js:35, 106, 376, 379-391; axe (color-contrast, button-name) clean in every state"
+        },
+        {
+          "condition": "9: live regions: status for thinking and result, alert for errors, timer not announced",
+          "evidence": "content/panel.js:219-224, 567; docs/review/evidence/round-5/report.json: \"Live regions exist and are empty before any text is written into them\", \"Shipped panel renders each typed error with an alert, action and collapsed details\""
+        },
+        {
+          "condition": "9: Escape closes the panel only when focus is inside it",
+          "evidence": "content/keyguard.js:7-11; docs/review/evidence/round-5/report.json: \"Browser keyboard-only ask, Escape and site shortcut isolation\" (Escape with focus on #site-previous leaves the panel open)"
+        },
+        {
+          "condition": "9: panel key events don't trigger site shortcuts",
+          "evidence": "docs/review/evidence/round-5/report.json: same test (siteShortcutCount and siteEarlyKeys stay 0 for window and document, capture and bubble)"
+        },
+        {
+          "condition": "9: UI boundaries and focus at 3:1 or better",
+          "evidence": "content/panel.js:25-26, 31, 35, 43, 72 (--edge #857a96 on --ink #19141f is about 4.5:1 and on --raise about 4.1:1; gold focus ring with an ink halo on the launcher)"
+        },
+        {
+          "condition": "9: targets at least 24×24 px",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser panel and options fit 320x568 with 24 px targets\", \"… 640x400 …\", \"Browser 200% zoom: panel and options fit, keep 24 px targets and work by keyboard\""
+        },
+        {
+          "condition": "9: state never shown by colour alone",
+          "evidence": "content/panel.js:501-502 (aria-pressed plus a tick), 495-496 (side as text); ask-side-unknown.png"
+        },
+        {
+          "condition": "9: works at 200% zoom and at 320 px width",
+          "evidence": "zoom200-result.png, zoom200-options.png (innerWidth 640 asserted at test/browser.js:788,799), narrow-ask-320x568.png, narrow-result-320x568.png, narrow-options-320x568.png"
+        },
+        {
+          "condition": "9: axe reports zero serious or critical issues in every state, provably inside the shadow root",
+          "evidence": "docs/review/evidence/round-5/report.json: \"axe reaches named and deliberately unnamed controls in the panel shadow root\", \"Browser screenshots pass axe in every displayed panel state\"; test/browser.js:111-131, 197-213"
+        },
+        {
+          "condition": "9: the options page meets the same bar",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser options render and pass axe\" plus the 200% and narrow tests; options.html:49-51 keeps empty live regions rendered"
+        },
+        {
+          "condition": "10: an Alt+Q-style commands shortcut",
+          "evidence": "manifest.json:64-71; background.js:458-461; docs/review/evidence/round-5/report.json: \"Worker opens the tab's panel on the Alt+Q command and ignores other commands\"; owner confirmation at docs/live-checklist.md:111-122"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: a documented screen-reader walkthrough with no blockers",
+          "evidence": "No such document in the repo (grep for VoiceOver, NVDA and \"screen reader\" finds only review notes); README.md:216-222 lists the docs",
+          "expected": "A dated walkthrough (for example VoiceOver with Chrome) of open, first-use notice, ask, thinking, result, error, close and Settings, with what was announced at each step.",
+          "observed": "None exists. The live regions are only checked structurally."
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "weight": 10,
+      "score": 9.5,
+      "n_met": 2,
+      "n_total_at_next_level": 3,
+      "met": [
+        {
+          "condition": "Level 6: untrusted text through textContent or the escape-first renderer, with a test; token local and sent only to the Queen servers over HTTPS; only FEN, moves and generation parameters sent; UI says the servers are third-party",
+          "evidence": "content/panel.js:166-211; background.js:254-259; docs/review/evidence/round-5/report.json: \"Shipped result renderer passes hostile strings through the escape-first Markdown subset\", \"Browser XSS corpus, network allowlist and isolated-world token denial\"; first-use.png"
+        },
+        {
+          "condition": "9: the fail-closed fair-play gating matrix is tested",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Adapter/Panel/Browser fixture {lichess,chesscom}-{in-progress,daily,puzzle,960,variant,unknown}\", the chess.com live-*, analysis-*, spa-analysis-live, 960-game, hidden-result and css-hidden-result fixtures, \"Open panel navigation gate …\" (8 tests), \"Browser staggered SPA move to /analysis that keeps the live board and running clock stays gated\", \"AQ.gate() is layout-free and agrees with readPosition() on every fixture\""
+        },
+        {
+          "condition": "9: an XSS corpus is tested in unit and E2E",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Provider text drops well-formed HTML, SVG and model tokens but keeps a lone '<'\", \"Shipped result renderer passes hostile strings…\", \"Browser XSS corpus, network allowlist and isolated-world token denial\""
+        },
+        {
+          "condition": "9: the background validates the sender and the payload",
+          "evidence": "background.js:182-204, 314-317; docs/review/evidence/round-5/report.json: \"Worker validates the sender and disallows non-top-frame or invalid ask messages\", \"Ask payload and custom origin validation reject unknown fields, unsafe SAN, URLs and caps\", \"Worker rejects malformed snapshots and lines that don't replay onto the snapshot, with no fetch\""
+        },
+        {
+          "condition": "9: content scripts never read the token",
+          "evidence": "background.js:298-300; docs/review/evidence/round-5/report.json: \"Browser XSS corpus, network allowlist and isolated-world token denial\" (storage read from the isolated world fails), \"Worker protects local storage on startup and install and limits prefs writes\", \"Browser token echoed by a server never appears in the panel\", \"Token redaction also catches paragraph, cross-field and invisible-character splits\""
+        },
+        {
+          "condition": "9: an E2E network allowlist proves no other hosts are contacted",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser XSS corpus, network allowlist and isolated-world token denial\" (body is exactly {data}, no cookie, no referrer), \"Browser reports no unexpected requests, uncaught errors, or mock mismatches\""
+        },
+        {
+          "condition": "9: a first-use third-party notice is shown",
+          "evidence": "first-use.png; content/panel.js:412-420"
+        },
+        {
+          "condition": "9: the token has Remove and guidance",
+          "evidence": "options.html:74-78, 96; options.js:47-55; options-saved.png; docs/review/evidence/round-5/report.json: \"Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent\""
+        },
+        {
+          "condition": "9: the privacy policy matches the behaviour line by line",
+          "evidence": "PRIVACY.md:20-35 against background.js:254-260 and content/panel.js:546-595; PRIVACY.md:43-63 against background.js:210-224; PRIVACY.md:86-98 against background.js:302-312, 350-358, 390-393; PRIVACY.md:37-39 against background.js:256"
+        },
+        {
+          "condition": "10: a renderer that builds DOM nodes with no innerHTML",
+          "evidence": "content/panel.js:149-211; no innerHTML, outerHTML, insertAdjacentHTML or DOMParser in any shipped file (grep); docs/review/evidence/round-5/report.json: \"Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion\""
+        },
+        {
+          "condition": "10: a one-page threat model",
+          "evidence": "docs/threat-model.md"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: a reviewer who cannot get mid-game help in 5 adversarial tries",
+          "evidence": "content/chesscom.js:16-19 and 46-49; content/common.js:167-170. Five tries run in memory against the shipped adapters (jsdom, recorded chess.com list markup and lila markup, nothing written to the repo)",
+          "expected": "All five in-progress pages stay gated: gate non-null from AQ.readPosition(), AQ.gate() and AQ.confirm().",
+          "observed": "Four stayed gated (live game reached through the Game Review URL; daily game with result-looking text in chat, notes and sidebar; lichess correspondence analysis with a typed result; lichess round view with result text in chat and crosstable). One opened: a chess.com game in progress with no clock-turn class (daily or bot game) and a hidden leftover share-panel PGN of an earlier finished game (div[hidden] > textarea.share-menu-tab-pgn-textarea[readonly] with [Result \"1-0\"] and other moves). readPosition().gate, AQ.gate() and AQ.confirm() all returned open and the move list was offered. The PGN [Result] is accepted with no visibility check and no check that the PGN belongs to the game on screen. I could not establish that chess.com leaves that textarea in the DOM after the dialog closes, and a running clock still gates (checked first), so I do not apply H6; the simulated try did succeed, so this condition is not met."
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "weight": 12,
+      "score": 9.5,
+      "n_met": 1,
+      "n_total_at_next_level": 2,
+      "met": [
+        {
+          "condition": "Level 6: exact host permissions, allowlist package script, draft privacy policy, listing and non-affiliation line",
+          "evidence": "manifest.json:18-21, 61-63; scripts/package.sh:8-13; PRIVACY.md; store/listing.md:49; docs/review/evidence/round-5/report.json: \"Manifest is MV3 with exactly the two built-in HTTPS grants and optional Space origins\""
+        },
+        {
+          "condition": "9: a zip-content test passes and the extracted zip loads cleanly",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Allowlist zip contains exactly the runtime files and preserves icon dimensions\", \"Extracted allowlist zip loads in Chromium\"; dist/ask-queen-1.0.0.zip lists 16 runtime files and its manifest.json, background.js and content/panel.js are byte-identical to the tree"
+        },
+        {
+          "condition": "9: every permission has a justification",
+          "evidence": "store/permissions.md:6-34 (storage, both hosts, the optional wildcard, site access) and 36-40 (remote code)"
+        },
+        {
+          "condition": "9: the data-use answers match the policy",
+          "evidence": "store/data-use.md:8-35 against PRIVACY.md:24-65"
+        },
+        {
+          "condition": "9: the single-purpose statement is written down",
+          "evidence": "store/single-purpose.md:5-9"
+        },
+        {
+          "condition": "9: screenshots at 1280×800 and a 440×280 promo tile from fixture pages with no site logos",
+          "evidence": "store/promo-440x280.png is 440×280 (viewed: name, crown glyph, abstract grid, example card; no site marks); store/promo.md; evidence PNGs are 1280×800 from fixture pages (result-agree.png, first-use.png)"
+        },
+        {
+          "condition": "9: reviewer instructions need no login",
+          "evidence": "store/reviewer-instructions.md:6-25 (lichess analysis board; explains the quota message)"
+        },
+        {
+          "condition": "9: the listing states fair play and the limits",
+          "evidence": "store/listing.md:36-44, 49"
+        },
+        {
+          "condition": "9: version 1.0.0 or later, matching the zip name and the CHANGELOG",
+          "evidence": "manifest.json:4; dist/ask-queen-1.0.0.zip; CHANGELOG.md:6; docs/review/evidence/round-5/report.json: \"Allowlist zip contains exactly…\" asserts the archive name"
+        },
+        {
+          "condition": "9: LICENSE and model attribution are present",
+          "evidence": "LICENSE:1-21, 31-49"
+        },
+        {
+          "condition": "9: store/OWNER-TODO.md covers hosting, the account and the Space-owner decision",
+          "evidence": "store/OWNER-TODO.md:5-13, 22-26, 43-57, 59-66"
+        },
+        {
+          "condition": "10: _locales/en",
+          "evidence": "_locales/en/messages.json; manifest.json:3,5; docs/review/evidence/round-5/report.json: \"Extracted allowlist zip loads in Chromium\" (chrome.i18n.getMessage(\"extName\"))"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: a draft upload that passes the dashboard checks (owner screenshot)",
+          "evidence": "store/OWNER-TODO.md:28-41 (every box unticked); no dashboard screenshot in the repo",
+          "expected": "An owner screenshot of the uploaded draft passing the dashboard's checks, naming the package version.",
+          "observed": "Not done. The privacy policy URL and homepage_url are still the placeholder https://github.com/ask-queen/ask-queen (content/panel.js:18, options.html:153, manifest.json:60), as OWNER-TODO §1-2 says."
+        }
+      ]
+    },
+    {
+      "id": "C8",
+      "weight": 5,
+      "score": 10,
+      "n_met": 1,
+      "n_total_at_next_level": 1,
+      "met": [
+        {
+          "condition": "Level 6: closed panel tick is one cheap selector check with no layout reads; nothing runs in hidden tabs; one host element; site CSS and JS untouched",
+          "evidence": "content/common.js:153-170; content/panel.js:298-319; docs/review/evidence/round-5/report.json: \"AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it\", \"Browser closed launcher ticks make no layout reads, also across a URL change\""
+        },
+        {
+          "condition": "9: the open panel updates from changes, debounced to 4/s or less, within 300 ms",
+          "evidence": "content/panel.js:320-337 (MutationObserver, next read max(100, 250 − elapsed) ms after a change); docs/review/evidence/round-5/report.json: \"Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes\" (gate shown within 300 ms)"
+        },
+        {
+          "condition": "9: no preventDefault or stopPropagation on site events",
+          "evidence": "No preventDefault in any content script (grep); stopImmediatePropagation only for key events whose composedPath includes the panel host: content/keyguard.js:5-9, content/panel.js:7-10; the two page-wide listeners are passive flag setters: content/common.js:154"
+        },
+        {
+          "condition": "9: one launcher plus stable timer and listener counts after 10 SPA navigations (tested)",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser ten SPA navigations retain one launcher and stable timer and listener counts\""
+        },
+        {
+          "condition": "10: a measured idle cost under 1 ms per second, documented",
+          "evidence": "docs/perf.md; docs/review/evidence/round-5/perf.json (0.136 ms per second, 0.003 ms per cached gate call); docs/review/evidence/round-5/report.json: \"Browser closed-panel idle cost stays under 1 ms per second\""
+        }
+      ],
+      "unmet": []
+    },
+    {
+      "id": "C9",
+      "weight": 8,
+      "score": 9.5,
+      "n_met": 1,
+      "n_total_at_next_level": 2,
+      "met": [
+        {
+          "condition": "Level 6: one command runs unit and DOM-fixture tests for both sites, all green, README explains how",
+          "evidence": "test/package.json (\"test\": \"node run.js\"); README.md:168-181; docs/review/evidence/round-5/report.json: 442 passed, 0 failed. I re-ran the unit, worker and panel suites in memory on the current tree: 277/277 passed, and every name is in the round-5 report"
+        },
+        {
+          "condition": "9: the suite covers the fixture matrix, the XSS corpus, SSE fragmentation, error codes, best-move extraction, and an E2E on the real unpacked extension with a mocked Space",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Adapter fixture *\" (101), \"Shipped result renderer passes hostile strings…\", \"SSE parser handles arbitrary byte splits…\", \"All background codes have a fixture…\", \"Best-move extraction handles positive and negative prose and never accepts lower-case pieces\", \"Unpacked extension E2E harness on Chromium\"; test/browser.js:41-49"
+        },
+        {
+          "condition": "9: each fixture has a distinct identity, asserted before its payload",
+          "evidence": "test/unit.js:33, test/panel.js:63, test/browser.js:97 and 179 (data-fixture checked first)"
+        },
+        {
+          "condition": "9: screenshots are generated for every state",
+          "evidence": "docs/review/evidence/round-5/*.png (63 files); test/browser.js:197-213 and the stateFor map at 243-248"
+        },
+        {
+          "condition": "9: an axe and keyboard E2E runs",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Browser screenshots pass axe in every displayed panel state\", \"Browser options render and pass axe\", \"Browser keyboard-only ask, Escape and site shortcut isolation\""
+        },
+        {
+          "condition": "9: three reviewer mutations each make a test fail",
+          "evidence": "docs/review/evidence/round-5/report.json: \"Mutation sanity: flipped side parity fails the flipped fixture\", \"Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion\", \"Mutation sanity: unconditional standard-root replay fails the custom start fixture\". My own in-memory mutations were also all caught: parity flipped in panel.js build() (validAsk assertion) and in common.js AQ.position(); textContent written as innerHTML in h() (error-details check); the [FEN] root and custom signs ignored in lichess.js and in chesscom.js"
+        },
+        {
+          "condition": "9: the README covers install, use, fair play, privacy, token, troubleshooting, custom server, test, package and limits",
+          "evidence": "README.md:33-43, 45-76, 78-93, 95-106, 108-125, 127-152, 154-166, 168-190, 201-214"
+        },
+        {
+          "condition": "10: CI on push",
+          "evidence": ".github/workflows/test.yml:2 (push and pull_request; installs Playwright Chromium and runs npm test)"
+        }
+      ],
+      "unmet": [
+        {
+          "condition": "10: a regression test for every bug fixed during the review loop",
+          "evidence": "options.html:49-51; content/panel.js:167-176 and 619-621; content/lichess.js:35-38; test/browser.js:829-878 and 906-915; test/unit.js:216-220",
+          "expected": "Each fix made in the loop has a test that fails without it.",
+          "observed": "Three fixes have none. (1) The Settings live regions that used to be display:none while empty (GPT round 4): no test checks that the empty regions are rendered. (2) The panel-side fix for very long answers (iterative inline(), append one by one, showResult try/catch): the only test is the background 20,000-character cap; nothing feeds the panel a long or unrenderable reply. (3) The narrowed lichess result evidence: no negative fixture has a .result outside .result-wrap / .analyse__moves or a [Result] in a textarea. I checked all three by hand in memory and they behave correctly."
+        }
+      ]
+    }
+  ],
+  "weighted_mean": 9.6,
+  "caps_triggered": [],
+  "overall": 9.6,
+  "issues": [
+    {
+      "severity": "major",
+      "criterion": "C6",
+      "where": "content/chesscom.js:16-19 and 46-49; content/common.js:167-170",
+      "problem": "chess.com accepts the share-panel PGN's [Result] as proof that the game on screen is finished, with no visibility check and no check that the PGN belongs to that game. In memory, a game in progress with no clock-turn class (daily or bot game) plus a hidden leftover textarea.share-menu-tab-pgn-textarea[readonly] from an earlier finished game (other moves, [Result \"1-0\"]) opens the gate in AQ.readPosition(), AQ.gate() and AQ.confirm(), and the move list is offered. Every other finished marker is checked for visibility and scope; this one is not. Whether chess.com leaves that textarea in the DOM after the dialog closes is not established, so no H6 cap is applied, but if it does this is a path to an answer during a game.",
+      "fix": "Pass the visibility function into pgnText() so the textarea (or data-pgn holder) must be visible, and accept its [Result] only when the PGN's movetext matches the on-page move list (same SAN sequence). Simpler: drop PGN [Result] as finished evidence and rely on the move-list result row and the game-over element, which the owner's live capture shows. Add fixtures for a hidden stale share PGN and a visible share PGN of another game on an in-progress page (Adapter, Panel and Browser, zero POSTs)."
+    },
+    {
+      "severity": "major",
+      "criterion": "C7",
+      "where": "docs/live-checklist.md:154-186; store/reviewer-instructions.md:6-13",
+      "problem": "The Chrome Web Store reviewer is told to test on the lichess analysis board, and that path has never been run on the live site. The lichess adapter is verified only against lila-derived fixtures (obfuscated round tags, the FEN input, variant classes). The rubric makes this check optional, so it costs no points, but a launcher that fails to appear there would read as a broken extension in review.",
+      "fix": "Owner: run the lichess block already templated in docs/live-checklist.md on the final commit (analysis board with 1.e4 e5 2.Nf3 Nc6 3.Bc4, both Copy FEN strings, a puzzle page, the home page), sign it by name and date, and capture the live markup into a fixture if anything differs."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C1",
+      "where": "docs/live-checklist.md:124-151; store/OWNER-TODO.md:68-73",
+      "problem": "The final-commit live record rests on two FEN strings and \"everything looks good\". The selected move (29.Rg3), which button produced which FEN, and both \"matches\" verdicts were derived by the coordinator; the first FEN would also fit \"Best move for White\" with 28... selected. There is no named signature line, the page type is only \"finished game\", and the in-progress and Alt+Q checks have no individual result. OWNER-TODO §7 still cites the 651b93a record. The condition is met by the signed 651b93a record plus this re-check, but the final record is weaker than the template asks for.",
+      "fix": "Owner: add one signed line to the ce55dc9 record (name and date) stating the move clicked, the page URL type, and which button gave each FEN; report the in-progress and shortcut results separately. Update OWNER-TODO §7 to point at the ce55dc9 record. Leave the earlier records unchanged."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C1",
+      "where": "content/chesscom.js:85-102; test/fixtures.js:291-300; README.md:210-211",
+      "problem": "chess.com variations are read as lines only through data-parent-node, an attribute no captured chess.com markup contains, so on the live site a selected sub-line always falls back to the board (Best move only).",
+      "fix": "Capture the live sub-line markup from chess.com Analysis (owner, as was done for the move list), derive ancestry from what it really exposes, and add fixtures built from that capture. Until then the README limit is accurate."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C5",
+      "where": "content/panel.js:365-367 with 300-313",
+      "problem": "Since fix pass 4, openPanel() hides the launcher and then awaits loadPrefs() on every open. If a one-second launcher tick lands during that await (the service worker waking takes that long), showLauncher() un-hides the launcher, and it stays in the tab order under the open panel until the panel closes. In memory, a 150 ms getPrefs delay left both shown in 1 of 4 opens, and a 1.1 s delay in 4 of 4. A focusable control hidden behind the dialog fails WCAG 2.2 Focus Not Obscured.",
+      "fix": "Set an `opening` flag (or stop the ticker) before the await and have showLauncher() return while it is set, or set fab.hidden = true again right after panel.hidden = false. Add a panel test with a delayed getPrefs that asserts the launcher is hidden whenever the panel is open."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C2",
+      "where": "background.js:80, 137-140, 158-159, 163-166",
+      "problem": "Only `analysis` is capped at 20,000 characters. The `evaluation` string, the EVALUATION line taken from the uncapped raw analysis, and critical_line_san are not, and plainAnalysis() runs /<!--[\\s\\S]*?-->/ over them, which is quadratic on repeated \"<!--\". Measured: a 320 KB evaluation takes 2.6 s in normalized(), so a 2 MB reply (the stream cap) blocks the service worker for well over a minute, during which the 150 s deadline and cancel cannot run in the worker. The whole string is then shown in the Evaluation row. It needs a hostile or broken server.",
+      "fix": "Cap evaluation and the EVALUATION sentence at about 300 characters and critical_line_san at about 400 before any regex, and drop the row when over. Add a unit test with a long \"<!--\" run that must return within a few milliseconds."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C8",
+      "where": "content/common.js:153-163; content/panel.js:300-313",
+      "problem": "The cached gate is recomputed only on a URL change, a new board element, or a click or key press. When chess.com renders the move list and result row after the board already exists (Game Review loading, a finished game page hydrating), nothing triggers a recompute, so the launcher stays hidden until the user's first click or key press. Reproduced in memory: 3.3 s after the result row appeared the launcher was still hidden; it appeared about a second after a pointerdown. It fails closed, but the button can look missing on a finished game.",
+      "fix": "After a URL or board change, re-evaluate the gate on a short backoff (for example at 1, 2, 4, 8 and 16 s) before settling into the cached steady state. The idle cost stays the same. Add a panel test where the result row arrives late with no input."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C4",
+      "where": "options.html:96 and 75; options.html:71, 75, 116 against content/panel.js:126-137, 233; store/promo-tile.html:25, 29; content/panel.js:135",
+      "problem": "Copy review. Settings says \"The token stays in this browser and is never synced\" right after warning that the token is sent with every question, so the two sentences read as a contradiction. The panel calls the model Queen while Settings and the promo tagline call it QUEEN, and only the README explains why. The reloaded error repeats \"Reload this page\" in its sentence and its button.",
+      "fix": "Change options.html:96 to \"The token is stored only in this browser and is never synced.\" Use one spelling in user-facing UI (Queen in Settings and the promo tile, with QUEEN kept for the model's formal name in the listing and README). Change the reloaded sentence to \"The page needs a reload to keep using it.\""
+    },
+    {
+      "severity": "minor",
+      "criterion": "C9",
+      "where": "options.html:49-51; content/panel.js:167-176 and 619-621; content/lichess.js:35-38; test/browser.js:829-878",
+      "problem": "Three fixes from the loop have no regression test: the Settings live regions staying rendered while empty, the panel's handling of very long or unrenderable answers (only the background cap is tested), and the narrowed lichess result evidence.",
+      "fix": "Add: an options E2E asserting the empty #token-error and #token-status are rendered (checkVisibility) before the first message; a panel test that renders about 20,000 characters of inline marks and one that feeds an unrenderable result and expects the bad_response error; lichess fixtures with a .result outside the accepted containers and a [Result] in a textarea on an in-progress game URL, expecting in_progress."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C6",
+      "where": "content/chesscom.js:55-62",
+      "problem": "Chess960 on an ordinary chess.com game URL is gated only when the first move is impossible from the standard start. A 960 game that opens 1.e4 e5 is not gated: the replay fails, the panel shows the \"disagree\" note and offers Best move from the pieces with guessed castling. Nothing wrong is sent silently, but spec §2 puts variants out of scope.",
+      "fix": "On a game page with no custom-start sign and a first row numbered 1, gate as a variant when every token is strict SAN but the mainline does not replay from the standard start (not only move 1). Add the 1.e4 960 case as a fixture."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C1",
+      "where": "content/chesscom.js:41; test/fixtures.js:289-290",
+      "problem": ".clock-component.clock-player-turn is treated as a running clock and checked before everything else. It marks whose turn it is, not that a clock is ticking. If chess.com leaves that class on a clock after the game ends, the finished-game page (/game/live/<id>) stays gated and only Game Review works. No fixture has a finished game with clock elements, and the live records do not say whether that page type was checked.",
+      "fix": "Owner: open a just-finished live game page (not Game Review) and confirm the launcher appears; capture its clock markup into a fixture. If the class lingers, let a visible result row or game-over element in the main layout outrank it."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C5",
+      "where": "docs/ (no file)",
+      "problem": "There is no documented screen-reader walkthrough, which C5 level 10 asks for.",
+      "fix": "Run VoiceOver with Chrome through open, first-use notice, ask, thinking, result, error, close and Settings; write what was announced at each step in docs/sr-walkthrough.md with the date and versions, and fix anything that blocks."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C7",
+      "where": "store/OWNER-TODO.md:5-20 and 28-41; content/panel.js:18; options.html:153; manifest.json:60",
+      "problem": "The zip as built links the first-use notice and Settings to a privacy policy at https://github.com/ask-queen/ask-queen/…, a placeholder the owner may not control, and homepage_url is the same placeholder. A test pins the placeholder, so nothing stops a zip with it from being uploaded. The dashboard draft screenshot (C7 level 10) is also outstanding. Both are listed owner steps.",
+      "fix": "Owner: host PRIVACY.md, set the three URLs, rebuild, upload the draft and keep the screenshot. Consider having scripts/package.sh warn while the placeholder is still present."
+    },
+    {
+      "severity": "minor",
+      "criterion": "C3",
+      "where": "content/panel.js:461 and 632",
+      "problem": "On a scanned board with unknown clocks the critical line is shown with its numbers stripped (\"e5 Nf3 Nc6\"). It is honest and the context line says \"(move numbers unknown)\", but an unnumbered line is harder to follow than a relative one.",
+      "fix": "Optional: number the line relative to the position and say so, for example \"1...e5 2.Nf3 (counted from this position)\"."
+    }
+  ]
+}
