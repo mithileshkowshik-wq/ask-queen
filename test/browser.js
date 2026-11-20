@@ -492,6 +492,29 @@ async function runBrowser(extension, temp, out, test, packaged) {
       });
     });
 
+    // --- Post-round-5 fixes, logic ---
+    await test("Browser result row rendered 500 ms after load shows the launcher with no input (Fable round 5)", async () => {
+      const { since } = await setup();
+      await withPage("chesscom-daily", async (page, ui) => {
+        await page.waitForFunction(() => window.aqAppendedAt > 0);
+        // The closed panel had already read the in-progress gate (and cached it) when the row arrived.
+        assert.equal(await page.evaluate(() => window.aqLauncherBefore), true, "launcher hidden before the result");
+        await ui("launcher").waitFor({ timeout: 2000 }); // within the normal one-second tick
+        assert.equal(await page.evaluate(() => window.aqInputs), 0, "no click or key press");
+        assert.equal(posts(since).length, 0);
+      }, { instrument: () => {
+        window.aqInputs = 0;
+        for (const type of ["pointerdown", "keydown"]) addEventListener(type, () => window.aqInputs++, true);
+        // The finished page hydrates late: the result row arrives 500 ms after load.
+        addEventListener("load", () => setTimeout(() => {
+          window.aqLauncherBefore = document.querySelector('[data-testid="aq-host"]')?.shadowRoot
+            ?.querySelector('[data-testid="aq-launcher"]')?.hidden;
+          document.querySelector("wc-simple-move-list").insertAdjacentHTML("beforeend", '<div class="game-result">1-0</div>');
+          window.aqAppendedAt = performance.now();
+        }, 500));
+      } });
+    });
+
     for (const error of ["quota", "token_rejected", "unreachable", "asleep", "busy", "illegal_position", "game_over",
       "bad_response", "all_unavailable", "mismatch"]) {
       await test("Browser error " + error, async () => {

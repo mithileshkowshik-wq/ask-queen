@@ -294,7 +294,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   // to open or the address changes (and again after 1, 2, 4, 8 and 16 s while a page is still loading), never on a
   // steady tick. The launcher shows only when both agree. AQ.readPosition() runs only when the panel opens, while
   // it is open, and at each click.
-  let ticker = 0, prefsReady = null, confirmed = false, tries = 0, wait = 0, href = "";
+  let ticker = 0, prefsReady = null, confirmed = false, tries = 0, wait = 0, href = "", opening = false;
   const unconfirm = () => { confirmed = false; tries = wait = 0; };
   async function showLauncher() {
     if (document.hidden) return;
@@ -308,7 +308,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       wait = 2 ** tries++;
     }
     if (open && confirmed && !prefs) await (prefsReady ||= loadPrefs());
-    fab.hidden = !(open && confirmed) || !panel.hidden;
+    fab.hidden = !(open && confirmed) || !panel.hidden || opening; // opening: a tick during openPanel's await
   }
   function watch() {
     const on = panel.hidden && !document.hidden;
@@ -362,8 +362,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   showLauncher();
 
   async function openPanel() {
-    fab.hidden = true;
-    await loadPrefs(); // every time: the shortcut may have been bound since the page loaded
+    fab.hidden = opening = true;
+    try { await loadPrefs(); } finally { opening = false; } // every time: the shortcut may have been bound since the page loaded
     pos = read();
     side = pos?.board?.side ?? null;
     useBoard = reading = false;

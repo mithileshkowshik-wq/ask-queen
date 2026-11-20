@@ -6,7 +6,7 @@ const bg = require("../background.js");
 const source = () => read("content/panel.js");
 const settle = () => new Promise(setImmediate);
 
-async function panelFixture(id, { firstUseSeen = true, mutate = (source) => source } = {}) {
+async function panelFixture(id, { firstUseSeen = true, mutate = (source) => source, prefsDelay = 0 } = {}) {
   const s = fixtureDoc(id);
   const { w } = s;
   const calls = [], events = {};
@@ -16,7 +16,7 @@ async function panelFixture(id, { firstUseSeen = true, mutate = (source) => sour
   w.chrome = { runtime: {
     id: "test-extension",
     sendMessage: async (m) => {
-      if (m.type === "getPrefs") return { ...prefs };
+      if (m.type === "getPrefs") return prefsDelay ? new Promise((resolve) => setTimeout(() => resolve({ ...prefs }), prefsDelay)) : { ...prefs };
       if (m.type === "setPrefs") Object.assign(prefs, m.prefs);
     },
     connect: ({ name }) => {
@@ -274,6 +274,23 @@ function runPanelTests(test) {
       s.click("best");
       assert.equal(s.calls.length, 1);
       assert.equal(s.calls[0].moves, F.SITES["chesscom-analysis"].expect.moves);
+    } finally { await s.close(); }
+  });
+
+  // --- Post-round-5 fixes, logic ---
+  test("A slow getPrefs (1.1 s, a waking worker) never re-shows the launcher while the panel opens (Fable round 5)", async () => {
+    const s = await panelFixture("lichess-analysis", { prefsDelay: 1100 });
+    try {
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      for (let i = 0; i < 60 && s.element("launcher").hidden; i++) await sleep(50);
+      assert(!s.element("launcher").hidden, "the launcher shows once prefs arrive");
+      s.element("launcher").click();
+      for (let t = 0; t < 1600; t += 50) {
+        assert(s.element("launcher").hidden, `launcher shown ${t} ms into the open`);
+        await sleep(50);
+      }
+      assert(!s.element("panel").hidden, "the panel is open");
+      assert(s.element("launcher").hidden);
     } finally { await s.close(); }
   });
 }

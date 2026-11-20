@@ -108,6 +108,7 @@
     name: "lichess",
     host: "lichess.org",
     board: "cg-board",
+    evidence: ".result-wrap, .analyse__moves, div.pgn",
     matches: () => location.hostname === "lichess.org" && AQ.hasBoard("cg-board"),
     gate: (visible = AQ.shown) => scope(document.querySelector(TREE), pgnText(), visible).gate,
     read() {

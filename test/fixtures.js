@@ -408,6 +408,29 @@ const RECORDED_FEN = "r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq 
 fixture("lichess-recorded", { fen: RECORDED_FEN, moves: RECORDED_MOVES, selected: 5, highlight: [["c6"], ["d4"]],
   expect: fromStart(RECORDED_MOVES, RECORDED_FEN) });
 
+// --- Post-round-5 fixes, logic ---
+// chess.com share-panel PGN (Fable round 5): its [Result] is evidence only when the PGN is on screen and its movetext
+// (chess.com writes clock comments) is exactly the move list. A hidden leftover export from an earlier game, a hidden
+// copy of this game's, and a visible one that only shares this game's opening all keep a game in progress gated.
+const sharePgn = (moves, style = "") => `<div class="share-menu-tab-pgn-section"${style}><textarea class="share-menu-tab-pgn-textarea" readonly>` +
+  `[Event "Live Chess"]\n[Site "Chess.com"]\n[Result "1-0"]\n\n${moves.map((san, i) =>
+    `${Math.floor(i / 2) + 1}${i % 2 ? "..." : "."} ${san} {[%clk 0:04:5${i}]}`).join(" ")} 1-0</textarea></div>`;
+for (const [id, url, extra, expect] of [
+  ["share-pgn-hidden-stale", "/game/daily/4815162342", sharePgn(["d4", "d5", "c4"], ' style="display:none"'), blocked("in_progress")],
+  ["share-pgn-hidden", "/game/daily/4815162342", sharePgn(["e4", "e5"], ' style="display:none"'), blocked("in_progress")],
+  ["share-pgn-other-game", "/game/daily/4815162342", sharePgn(OPENING), blocked("in_progress")],
+  ["share-pgn-finished", "/game/live/123456789", sharePgn(["e4", "e5"]), fromStart(["e4", "e5"], E5)],
+]) fixture("chesscom-" + id, { url, fen: E5, moves: OPENING.slice(0, 2), selected: 1, highlight: [["e7"], ["e5"]], finished: false, extra, expect });
+// lichess result evidence only from lila's own result slots (Fable round 5): a .result elsewhere, or a [Result] in a
+// textarea, on a game still being played keeps it gated.
+fixture("lichess-round-stray-result", { url: "/abcdefgh", fen: E5,
+  customTree: '<rm6><l4x><i5z>1</i5z><kwdb>e4</kwdb><kwdb class="a1t">e5</kwdb></l4x></rm6><aside class="mchat"><div class="result">1-0</div></aside>',
+  expect: blocked("in_progress") });
+fixture("lichess-game-analysis-stray-result", { url: "/abcdefgh/white/analysis", fen: E5, moves: ["e4", "e5"], selected: 1,
+  highlight: [["e7"], ["e5"]], extra: '<div class="analyse__side"><div class="result">1-0</div></div>', expect: blocked("in_progress") });
+fixture("lichess-game-analysis-textarea-result", { url: "/abcdefgh/white/analysis", fen: E5, moves: ["e4", "e5"], selected: 1,
+  highlight: [["e7"], ["e5"]], extra: '<textarea name="pgn">[Event "x"]\n[Result "1-0"]\n\n1. e4 e5 1-0</textarea>', expect: blocked("in_progress") });
+
 function sse(name) {
   return fs.readFileSync(path.join(__dirname, "fixtures", name), "utf8");
 }

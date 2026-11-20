@@ -13,14 +13,31 @@
   const RESULT = /^\s*(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2\s*[-–]\s*1\/2)\s*$/;
   // PGN only from the share panel's read-only textarea or a data-pgn on the board or its layout, never from a box the
   // user can type in; only text that starts with a tag counts.
-  const pgnText = () => [...document.querySelectorAll(`textarea.share-menu-tab-pgn-textarea[readonly],
+  const pgns = () => [...document.querySelectorAll(`textarea.share-menu-tab-pgn-textarea[readonly],
       .share-menu-tab-pgn-section textarea[readonly], wc-chess-board[data-pgn], chess-board[data-pgn],
-      .board-layout-main[data-pgn], .board-layout-chessboard[data-pgn]`)].map((el) => el.value ?? el.dataset.pgn)
-    .filter((text) => /^\s*\[\w+\s+"/.test(text || "")).join("\n");
+      .board-layout-main[data-pgn], .board-layout-chessboard[data-pgn]`)].map((el) => [el, el.value ?? el.dataset.pgn])
+    .filter(([, text]) => /^\s*\[\w+\s+"/.test(text || ""));
+  const pgnText = () => pgns().map(([, text]) => text).join("\n");
+  // A PGN's [Result] is finished-game evidence only when that PGN is on screen and its movetext is exactly the main line
+  // in the move list (Fable round 5): a hidden leftover export, another game's, or one that only shares this game's
+  // opening is not.
+  function finishedPgn(visible) {
+    const line = [...document.querySelectorAll(LIST)].filter((n) => visible(n) && !n.closest(VARIATION) &&
+      (!n.dataset.node || n.dataset.node.startsWith("0-"))).map(san);
+    if (!line.length || !line.every(Boolean)) return false;
+    return pgns().some(([el, text]) => {
+      if (!RESULT.test(AQ.tag(text, "Result") || "") || !visible(el)) return false;
+      let body = text.replace(/^\s*\[[^\]\n]*\]\s*$/gm, " ").replace(/\{[^}]*\}|;[^\n]*/g, " ");
+      while (/\([^()]*\)/.test(body)) body = body.replace(/\([^()]*\)/g, " ");
+      const sans = body.replace(/\$\d+|\d+\.(?:\.\.)?|1-0|0-1|1\/2-1\/2|\*/g, " ").split(/\s+/).filter(Boolean);
+      return sans.length === line.length && sans.every((s, i) => C.stripSan(s) === C.stripSan(line[i]));
+    });
+  }
 
   // Fail closed. Puzzles and variants first. Any page tied to a game (/game/…, /analysis/game/…, Game Review) needs a
   // finished game on screen: a result token in the move list, a game-over element in the main board layout, or the
-  // share PGN's [Result]. A running clock always means the game is on. "tab=review" and "/review" only label the page.
+  // [Result] of a share PGN on screen whose moves are the move list's. A running clock always means the game is on.
+  // "tab=review" and "/review" only label the page.
   // Only the standalone analysis board (no game id) is open without that evidence, and only with a board element never
   // seen gated: a daily game (no running clock) kept on screen across an SPA move to /analysis stays closed.
   const held = new WeakSet();
@@ -54,7 +71,7 @@
     const finished = [...document.querySelectorAll(`:is(${layout}) :is(.game-over-modal, .game-over-header, .game-over-modal-content)`)].some(visible) ||
       [...document.querySelectorAll(`:is(${MOVE_LIST}) :is(.game-result, [data-game-result])`)]
         .some((el) => visible(el) && RESULT.test(el.dataset.gameResult || el.textContent)) ||
-      RESULT.test(AQ.tag(pgn, "Result") || "");
+      finishedPgn(visible);
     return { page, gate: finished ? null : "in_progress" };
   }
 
@@ -136,6 +153,7 @@
     name: "chess.com",
     host: "www.chess.com",
     board: BOARD,
+    evidence: `${MOVE_LIST}, .game-over-modal, .game-over-header, .game-over-modal-content`,
     matches: () => location.hostname === "www.chess.com" && AQ.hasBoard(BOARD),
     gate: (visible = AQ.shown) => scope(visible, pgnText()).gate,
     read() {

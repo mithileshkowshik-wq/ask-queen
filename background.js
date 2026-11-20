@@ -76,8 +76,10 @@ function plainAnalysis(text, side) {
   const player = side === "w" ? "White" : "Black";
   const opponent = side === "w" ? "Black" : "White";
   return text
-    .replace(/<(svg|script|style|iframe)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, "")
-    .replace(/<!--[\s\S]*?-->|<\/?[a-z][^<>]*>/gi, "")
+    // Linear on hostile input: an opener's attributes stop at the next "<", and an unclosed comment runs to the end
+    // (as in a browser), so no failed match rescans the rest of the text.
+    .replace(/<(svg|script|style|iframe)\b[^<>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, "")
+    .replace(/<!--[\s\S]*?(?:-->|$)|<\/?[a-z][^<>]*>/gi, "")
     .replace(/^\s*ANALYSIS:\s*/i, "")
     .replace(/^(?:BEST_MOVE|CRITICAL_LINE|PROMISING_MOVES|EVALUATION):.*$/gm, "")
     .replace(/(\S[ \t]+|\()(\d+\.(?:\.\.)?)[ \t]+(?=(?:O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8])\b)/g, "$1$2")
@@ -131,8 +133,11 @@ function proseMove(text) {
 }
 
 const ANALYSIS_CAP = 20000; // characters of provider prose kept; the recordings are under 4,000
+// The recordings' evaluation sentence and critical line are under 300 characters; longer ones are dropped, not cut.
+const EVAL_CAP = 2000, LINE_CAP = 4000;
 function normalized(out, api, req, server, seconds, token) {
-  out = invisible(out); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
+  // Every provider string is capped before any regex work, so a 2 MB reply can't hold up the worker.
+  out = invisible(deep(out, (s) => s.slice(0, ANALYSIS_CAP))); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
   const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
     out[3] && typeof out[3] === "object" && { ...out[3], analysis: out[2] });
   const pos = chess.parseFen(raw?.fen);
@@ -158,15 +163,15 @@ function normalized(out, api, req, server, seconds, token) {
   // prose. After player/opponent → White/Black it must name a side; an "equal" sentence is shown as equal for both,
   // anything else is dropped. A bare number has no known sign convention (no recording has one), so it gets no row.
   const sentence = typeof ev === "string" ? ev : ev == null ? /^EVALUATION:[ \t]*(.+)$/m.exec(raw.analysis)?.[1] : null;
-  const said = sentence ? plainAnalysis(sentence, pos.side) : "";
+  const said = sentence && sentence.length <= EVAL_CAP ? plainAnalysis(sentence, pos.side) : "";
   const evaluation = Number.isFinite(ev) ? ev : null;
   const evaluationText = !said ? null : /\b(?:White|Black)\b/.test(said) ? said :
     /\b(?:equal|balanced|level|even)\b/i.test(said) ? "Equal for White and Black: " + said : null;
   const suppliedLine = Array.isArray(raw.critical_line_san) ? raw.critical_line_san.join(" ") : raw.critical_line_san;
   const line = typeof suppliedLine === "string"
-    ? suppliedLine.replace(/\d+\.(?:\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean)
+    ? (suppliedLine.length > LINE_CAP ? "" : suppliedLine).replace(/\d+\.(?:\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean)
     : Array.isArray(raw.critical_line?.legal_steps) ? raw.critical_line.legal_steps.map((step) => step?.san) : [];
-  const criticalLine = line.length && line.every(chess.isStrictSan)
+  const criticalLine = line.length && line.join(" ").length <= LINE_CAP && line.every(chess.isStrictSan)
     ? line.map((san, i) => i && (i + (pos.side === "b")) % 2 ? san : chess.moveLabel(san, raw.fen, i)).join(" ") : null;
   // A replayed line gives the exact position Queen should have analysed, rights and en passant included.
   const asked = typeof req.moves === "string" && req.moves ? req.moves.split(" ") : [];
