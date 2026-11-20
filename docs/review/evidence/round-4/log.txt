@@ -1,0 +1,409 @@
+PASS Manifest is MV3 with exactly the two built-in HTTPS grants and optional Space origins
+PASS Shipped JavaScript parses with no dynamic code execution
+PASS Every sending fixture has a mock reply FEN for both API shapes
+PASS Allowlist zip contains exactly the runtime files and preserves icon dimensions
+PASS FEN parser preserves all six fields and rejects malformed ranks and clocks
+PASS Strict SAN strips annotations only and never repairs a localized or malformed move
+PASS Pre-send checks enforce root-relative capture count, side, footprint and zero-ply placement
+PASS Verify Best checks both placement and side
+PASS Verify Explain reproduces quiet moves, both castles, en passant, promotion and a capture
+PASS SAN/UCI matching checks the piece, square, disambiguation and promotion
+PASS Board hygiene rejects impossible boards and ignores ambiguous highlights
+PASS Adapter fixture lichess-analysis
+PASS Adapter fixture lichess-start
+PASS Adapter fixture lichess-final
+PASS Adapter fixture lichess-flipped
+PASS Adapter fixture lichess-board-side
+PASS Adapter fixture lichess-board-unknown
+PASS Adapter fixture lichess-mini
+PASS Adapter fixture lichess-animation
+PASS Adapter fixture lichess-user-marked
+PASS Adapter fixture lichess-impossible
+PASS Adapter fixture lichess-disagree
+PASS Adapter fixture lichess-mate
+PASS Adapter fixture lichess-returned-rook
+PASS Adapter fixture lichess-in-progress
+PASS Adapter fixture lichess-daily
+PASS Adapter fixture lichess-puzzle
+PASS Adapter fixture lichess-960
+PASS Adapter fixture lichess-variant
+PASS Adapter fixture lichess-unknown
+PASS Adapter fixture lichess-no-board
+PASS Adapter fixture lichess-castle-white
+PASS Adapter fixture lichess-castle-black
+PASS Adapter fixture lichess-en-passant
+PASS Adapter fixture lichess-promotion
+PASS Adapter fixture lichess-underpromotion
+PASS Adapter fixture chesscom-review
+PASS Adapter fixture chesscom-start
+PASS Adapter fixture chesscom-final
+PASS Adapter fixture chesscom-flipped
+PASS Adapter fixture chesscom-board-side
+PASS Adapter fixture chesscom-board-unknown
+PASS Adapter fixture chesscom-mini
+PASS Adapter fixture chesscom-animation
+PASS Adapter fixture chesscom-user-marked
+PASS Adapter fixture chesscom-impossible
+PASS Adapter fixture chesscom-disagree
+PASS Adapter fixture chesscom-mate
+PASS Adapter fixture chesscom-returned-rook
+PASS Adapter fixture chesscom-in-progress
+PASS Adapter fixture chesscom-daily
+PASS Adapter fixture chesscom-puzzle
+PASS Adapter fixture chesscom-960
+PASS Adapter fixture chesscom-variant
+PASS Adapter fixture chesscom-unknown
+PASS Adapter fixture chesscom-no-board
+PASS Adapter fixture chesscom-castle-white
+PASS Adapter fixture chesscom-castle-black
+PASS Adapter fixture chesscom-en-passant
+PASS Adapter fixture chesscom-promotion
+PASS Adapter fixture chesscom-underpromotion
+PASS Adapter fixture lichess-variation
+PASS Adapter fixture lichess-round
+PASS Adapter fixture lichess-round-current
+PASS Adapter fixture lichess-finished
+PASS Adapter fixture lichess-study
+PASS Adapter fixture lichess-frompos-round
+PASS Adapter fixture lichess-frompos-analysis
+PASS Adapter fixture lichess-study-960
+PASS Adapter fixture lichess-study-crazyhouse
+PASS Adapter fixture lichess-inline-custom
+PASS Adapter fixture lichess-column-black-first
+PASS Adapter fixture lichess-custom-start
+PASS Adapter fixture lichess-fen-mismatch
+PASS Adapter fixture lichess-streak
+PASS Adapter fixture chesscom-analysis
+PASS Adapter fixture chesscom-finished
+PASS Adapter fixture chesscom-variation
+PASS Adapter fixture chesscom-variation-ancestry
+PASS Adapter fixture chesscom-localized
+PASS Adapter fixture chesscom-live-markup
+PASS Adapter fixture chesscom-live-markup-black
+PASS Adapter fixture chesscom-text-figurines
+PASS Adapter fixture chesscom-hidden-result
+PASS Adapter fixture chesscom-live-tab-review
+PASS Adapter fixture chesscom-daily-tab-review
+PASS Adapter fixture chesscom-live-review
+PASS Adapter fixture chesscom-analysis-daily
+PASS Adapter fixture chesscom-analysis-live
+PASS Adapter fixture chesscom-live-notes-result
+PASS Adapter fixture chesscom-live-sidebar-result
+PASS Adapter fixture chesscom-live-tab-review-sidebar
+PASS Adapter fixture chesscom-live-clock-and-result
+PASS Adapter fixture chesscom-inner-space
+PASS Adapter fixture chesscom-marks-only
+PASS Adapter fixture chesscom-mixed-highlights
+PASS Adapter fixture lichess-custom-line
+PASS Adapter fixture chesscom-tagged-root
+PASS Adapter fixture chesscom-row-number
+PASS Adapter fixture lichess-rights-mismatch
+PASS Adapter fixture lichess-sibling-nf3
+PASS Adapter fixture lichess-sibling-bc4
+PASS Adapter fixture lichess-recorded
+PASS AQ.gate() is layout-free and agrees with readPosition() on every fixture
+PASS AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it
+PASS A moving piece keeps the board unreadable until it lands
+PASS With exact rights in the snapshot, Best needs equal rights and Explain may only lose rights
+PASS Prose is confirmed only by the answering provider's own legality field
+PASS The real boneyland recording normalizes with its evaluation sentence and a numbered line
+PASS SSE parser handles arbitrary byte splits, CRLF, Unicode, multi-line data and no complete
+PASS Best-move extraction handles positive and negative prose and never accepts lower-case pieces
+PASS Both recorded API shapes normalize with strict move-source precedence and no HTML outputs
+PASS Provider text drops well-formed HTML, SVG and model tokens but keeps a lone '<'
+PASS Full SAN replay: legal moves, disambiguation by pins, castling, en passant, promotion, rights and clocks
+PASS Adapters drop a move list whose replay doesn't match the exact FEN's castling or en passant
+PASS Background checks the returned FEN against the replayed line, rights and en passant included
+PASS Token redaction also catches paragraph, cross-field and invisible-character splits
+PASS Evaluation rows: both real recordings name a side, a sideless sentence is dropped, an equal one names both
+PASS hugging-apps prose is confirmed by its recorded critical_line.legal_steps object
+PASS Token redaction runs last and catches the saved token split by markup or Markdown
+PASS All background codes have a fixture, with same/different/permanent fallback precedence
+PASS Ask payload and custom origin validation reject unknown fields, unsafe SAN, URLs and caps
+PASS Mutation sanity: flipped side parity fails the flipped fixture
+PASS Mutation sanity: unconditional standard-root replay fails the custom start fixture
+PASS Worker protects local storage on startup and install and limits prefs writes
+PASS Worker strips check and annotation marks before sending SAN to the Space
+PASS Worker opens the tab's panel on the Alt+Q command and ignores other commands
+PASS Worker rejects malformed snapshots and lines that don't replay onto the snapshot, with no fetch
+PASS Worker keys the cache and coalescing on the snapshot's exact rights
+PASS Worker keeps a Retry-After cooldown for every ask and tab, then asks again
+PASS Worker lifts a Retry-After cooldown when the settings change (a token for a quota)
+PASS Worker validates the sender and disallows non-top-frame or invalid ask messages
+PASS Worker coalesces duplicate asks, splits cancellation, serves the cache, spaces asks and changes fresh seed
+PASS Worker survives 90 s of bytes, including heartbeat and partial lines, with keepalives and 60 s status
+PASS Worker aborts at 45 s and reports two timeouts at 90 s
+PASS Worker aborts at 45 s and gets a backup answer
+PASS Worker aborts an unresponsive connect at 20 s and an active loop at 150 s overall
+PASS Disconnecting the last client aborts immediately and late replies do not fall back
+PASS Worker error path: quota
+PASS Worker error path: token_rejected
+PASS Worker error path: busy
+PASS Worker error path: illegal_position
+PASS Worker error path: game_over
+PASS Worker error path: bad_response
+PASS Worker error path: unreachable
+PASS Worker error path: asleep
+PASS Worker error path: all_unavailable
+PASS Worker error path: quota after fallback
+PASS Worker treats 401 without a token as a dead server and tries the backup
+PASS Worker passes Retry-After (seconds) with the busy error
+PASS Worker passes Retry-After (HTTP date) with the busy error
+PASS Worker tells a second tab that another tab is already asking
+PASS Worker echoing the saved token in its answer never reaches the panel
+PASS Worker tries backup on a stream with no complete
+PASS Worker refuses malformed event IDs and redirects before issuing any follow-on request
+PASS Custom origin grants and token consent are checked independently, and other uses the other server
+PASS Panel fixture lichess-analysis
+PASS Panel fixture lichess-start
+PASS Panel fixture lichess-final
+PASS Panel fixture lichess-flipped
+PASS Panel fixture lichess-board-side
+PASS Panel fixture lichess-board-unknown
+PASS Panel fixture lichess-mini
+PASS Panel fixture lichess-animation
+PASS Panel fixture lichess-user-marked
+PASS Panel fixture lichess-impossible
+PASS Panel fixture lichess-disagree
+PASS Panel fixture lichess-mate
+PASS Panel fixture lichess-returned-rook
+PASS Panel fixture lichess-in-progress
+PASS Panel fixture lichess-daily
+PASS Panel fixture lichess-puzzle
+PASS Panel fixture lichess-960
+PASS Panel fixture lichess-variant
+PASS Panel fixture lichess-unknown
+PASS Panel fixture lichess-no-board
+PASS Panel fixture lichess-castle-white
+PASS Panel fixture lichess-castle-black
+PASS Panel fixture lichess-en-passant
+PASS Panel fixture lichess-promotion
+PASS Panel fixture lichess-underpromotion
+PASS Panel fixture chesscom-review
+PASS Panel fixture chesscom-start
+PASS Panel fixture chesscom-final
+PASS Panel fixture chesscom-flipped
+PASS Panel fixture chesscom-board-side
+PASS Panel fixture chesscom-board-unknown
+PASS Panel fixture chesscom-mini
+PASS Panel fixture chesscom-animation
+PASS Panel fixture chesscom-user-marked
+PASS Panel fixture chesscom-impossible
+PASS Panel fixture chesscom-disagree
+PASS Panel fixture chesscom-mate
+PASS Panel fixture chesscom-returned-rook
+PASS Panel fixture chesscom-in-progress
+PASS Panel fixture chesscom-daily
+PASS Panel fixture chesscom-puzzle
+PASS Panel fixture chesscom-960
+PASS Panel fixture chesscom-variant
+PASS Panel fixture chesscom-unknown
+PASS Panel fixture chesscom-no-board
+PASS Panel fixture chesscom-castle-white
+PASS Panel fixture chesscom-castle-black
+PASS Panel fixture chesscom-en-passant
+PASS Panel fixture chesscom-promotion
+PASS Panel fixture chesscom-underpromotion
+PASS Panel fixture lichess-variation
+PASS Panel fixture lichess-round
+PASS Panel fixture lichess-round-current
+PASS Panel fixture lichess-finished
+PASS Panel fixture lichess-study
+PASS Panel fixture lichess-frompos-round
+PASS Panel fixture lichess-frompos-analysis
+PASS Panel fixture lichess-study-960
+PASS Panel fixture lichess-study-crazyhouse
+PASS Panel fixture lichess-inline-custom
+PASS Panel fixture lichess-column-black-first
+PASS Panel fixture lichess-custom-start
+PASS Panel fixture lichess-fen-mismatch
+PASS Panel fixture lichess-streak
+PASS Panel fixture chesscom-analysis
+PASS Panel fixture chesscom-finished
+PASS Panel fixture chesscom-variation
+PASS Panel fixture chesscom-variation-ancestry
+PASS Panel fixture chesscom-localized
+PASS Panel fixture chesscom-live-markup
+PASS Panel fixture chesscom-live-markup-black
+PASS Panel fixture chesscom-text-figurines
+PASS Panel fixture chesscom-hidden-result
+PASS Panel fixture chesscom-live-tab-review
+PASS Panel fixture chesscom-daily-tab-review
+PASS Panel fixture chesscom-live-review
+PASS Panel fixture chesscom-analysis-daily
+PASS Panel fixture chesscom-analysis-live
+PASS Panel fixture chesscom-live-notes-result
+PASS Panel fixture chesscom-live-sidebar-result
+PASS Panel fixture chesscom-live-tab-review-sidebar
+PASS Panel fixture chesscom-live-clock-and-result
+PASS Panel fixture chesscom-inner-space
+PASS Panel fixture chesscom-marks-only
+PASS Panel fixture chesscom-mixed-highlights
+PASS Panel fixture lichess-custom-line
+PASS Panel fixture chesscom-tagged-root
+PASS Panel fixture chesscom-row-number
+PASS Panel fixture lichess-rights-mismatch
+PASS Panel fixture lichess-sibling-nf3
+PASS Panel fixture lichess-sibling-bc4
+PASS Panel fixture lichess-recorded
+PASS First-use notice and docking write only the panel prefs
+PASS Shipped panel renders each typed error with an alert, action and collapsed details
+PASS Shipped result renderer passes hostile strings through the escape-first Markdown subset
+PASS Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion
+PASS Panel rejects clicks after the cursor changes, then flags earlier results stale
+PASS A click on another line's move while an ask is in flight cancels it and asks about the new move
+PASS Live regions exist and are empty before any text is written into them
+PASS Another tab's ask shows its own copy, not the busy-server copy
+PASS Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes
+PASS Chromium major equals the manifest minimum_chrome_version
+PASS axe reaches named and deliberately unnamed controls in the panel shadow root
+PASS First-use notice and only an explicit click sends a request
+PASS Browser fixture lichess-analysis
+PASS Browser fixture lichess-start
+PASS Browser fixture lichess-final
+PASS Browser fixture lichess-flipped
+PASS Browser fixture lichess-board-side
+PASS Browser fixture lichess-board-unknown
+PASS Browser fixture lichess-mini
+PASS Browser fixture lichess-animation
+PASS Browser fixture lichess-user-marked
+PASS Browser fixture lichess-impossible
+PASS Browser fixture lichess-disagree
+PASS Browser fixture lichess-mate
+PASS Browser fixture lichess-returned-rook
+PASS Browser fixture lichess-in-progress
+PASS Browser fixture lichess-daily
+PASS Browser fixture lichess-puzzle
+PASS Browser fixture lichess-960
+PASS Browser fixture lichess-variant
+PASS Browser fixture lichess-unknown
+PASS Browser fixture lichess-no-board
+PASS Browser fixture lichess-castle-white
+PASS Browser fixture lichess-castle-black
+PASS Browser fixture lichess-en-passant
+PASS Browser fixture lichess-promotion
+PASS Browser fixture lichess-underpromotion
+PASS Browser fixture chesscom-review
+PASS Browser fixture chesscom-start
+PASS Browser fixture chesscom-final
+PASS Browser fixture chesscom-flipped
+PASS Browser fixture chesscom-board-side
+PASS Browser fixture chesscom-board-unknown
+PASS Browser fixture chesscom-mini
+PASS Browser fixture chesscom-animation
+PASS Browser fixture chesscom-user-marked
+PASS Browser fixture chesscom-impossible
+PASS Browser fixture chesscom-disagree
+PASS Browser fixture chesscom-mate
+PASS Browser fixture chesscom-returned-rook
+PASS Browser fixture chesscom-in-progress
+PASS Browser fixture chesscom-daily
+PASS Browser fixture chesscom-puzzle
+PASS Browser fixture chesscom-960
+PASS Browser fixture chesscom-variant
+PASS Browser fixture chesscom-unknown
+PASS Browser fixture chesscom-no-board
+PASS Browser fixture chesscom-castle-white
+PASS Browser fixture chesscom-castle-black
+PASS Browser fixture chesscom-en-passant
+PASS Browser fixture chesscom-promotion
+PASS Browser fixture chesscom-underpromotion
+PASS Browser fixture lichess-variation
+PASS Browser fixture lichess-round
+PASS Browser fixture lichess-round-current
+PASS Browser fixture lichess-finished
+PASS Browser fixture lichess-study
+PASS Browser fixture lichess-frompos-round
+PASS Browser fixture lichess-frompos-analysis
+PASS Browser fixture lichess-study-960
+PASS Browser fixture lichess-study-crazyhouse
+PASS Browser fixture lichess-inline-custom
+PASS Browser fixture lichess-column-black-first
+PASS Browser fixture lichess-custom-start
+PASS Browser fixture lichess-fen-mismatch
+PASS Browser fixture lichess-streak
+PASS Browser fixture chesscom-analysis
+PASS Browser fixture chesscom-finished
+PASS Browser fixture chesscom-variation
+PASS Browser fixture chesscom-variation-ancestry
+PASS Browser fixture chesscom-localized
+PASS Browser fixture chesscom-live-markup
+PASS Browser fixture chesscom-live-markup-black
+PASS Browser fixture chesscom-text-figurines
+PASS Browser fixture chesscom-hidden-result
+PASS Browser fixture chesscom-live-tab-review
+PASS Browser fixture chesscom-daily-tab-review
+PASS Browser fixture chesscom-live-review
+PASS Browser fixture chesscom-analysis-daily
+PASS Browser fixture chesscom-analysis-live
+PASS Browser fixture chesscom-live-notes-result
+PASS Browser fixture chesscom-live-sidebar-result
+PASS Browser fixture chesscom-live-tab-review-sidebar
+PASS Browser fixture chesscom-live-clock-and-result
+PASS Browser fixture chesscom-inner-space
+PASS Browser fixture chesscom-marks-only
+PASS Browser fixture chesscom-mixed-highlights
+PASS Browser fixture lichess-custom-line
+PASS Browser fixture chesscom-tagged-root
+PASS Browser fixture chesscom-row-number
+PASS Browser fixture lichess-rights-mismatch
+PASS Browser fixture lichess-sibling-nf3
+PASS Browser fixture lichess-sibling-bc4
+PASS Browser fixture lichess-recorded
+PASS Open panel navigation gate lichess-in-progress
+PASS Open panel navigation gate chesscom-960
+PASS Open panel navigation gate lichess-puzzle
+PASS Open panel navigation gate chesscom-live-tab-review
+PASS Open panel navigation gate chesscom-daily-tab-review
+PASS Open panel navigation gate chesscom-live-review
+PASS Open panel navigation gate chesscom-analysis-daily
+PASS Open panel navigation gate chesscom-analysis-live
+PASS Browser result-disagree
+PASS Browser result-agree
+PASS Browser result-best
+PASS Browser result-from-text
+PASS Browser result-no-clear-move
+PASS Browser result-truncated
+PASS Browser result-promising
+PASS Browser cache replay and stale result after a cursor change
+PASS Browser stale Best result whose new position only allows Explain re-asks with Explain
+PASS Browser Alt+Q command message opens the panel, and the shortcut is shown
+PASS Browser closed-panel idle cost stays under 1 ms per second
+PASS Browser error quota
+PASS Browser error token_rejected
+PASS Browser error unreachable
+PASS Browser error asleep
+PASS Browser error busy
+PASS Browser error illegal_position
+PASS Browser error game_over
+PASS Browser error bad_response
+PASS Browser error all_unavailable
+PASS Browser error mismatch
+PASS Browser primary 503 uses the backup and shows its recorded reply
+PASS Browser Survival: 90 seconds of heartbeats keep the original worker and attempt alive
+PASS Browser Timeout: primary aborts at 45 seconds and backup times out at 90 s
+PASS Browser Timeout: primary aborts at 45 seconds and backup answers
+PASS Browser streaming mock observes abort on cancel
+PASS Browser streaming mock observes abort on close
+PASS Browser streaming mock observes abort on navigate
+PASS Browser streaming mock observes abort on tab
+PASS Browser XSS corpus, network allowlist and isolated-world token denial
+PASS Browser token echoed by a server never appears in the panel
+PASS Browser keyboard-only ask, Escape and site shortcut isolation
+PASS Browser ten SPA navigations retain one launcher and stable timer and listener counts
+PASS Browser overlap or remembered dock at 1280×800 and 1440×900 for lichess-analysis
+PASS Browser overlap or remembered dock at 1280×800 and 1440×900 for chesscom-review
+PASS Browser port state cancelled
+PASS Browser port state extension_reloaded
+PASS Browser 200% zoom: panel and options fit, keep 24 px targets and work by keyboard
+PASS Browser panel and options fit 320x568 with 24 px targets
+PASS Browser panel and options fit 640x400 with 24 px targets
+PASS Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent
+PASS Browser quota recovery: add a token in Settings, then retry on the same page
+PASS Browser options render and pass axe
+PASS Browser screenshots pass axe in every displayed panel state
+PASS Browser reports no unexpected requests, uncaught errors, or mock mismatches
+PASS Extracted allowlist zip loads in Chromium
+PASS Unpacked extension E2E harness on Chromium
+
+407/407 passed, 0 failed in 448.5 s
