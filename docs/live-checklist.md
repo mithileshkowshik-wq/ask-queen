@@ -121,36 +121,34 @@ press did nothing. Chrome had not bound the new command's key on the existing in
 the owner bound it at `chrome://extensions/shortcuts`, ⌥Q opened the panel. The README now says to set the key there
 if the shortcut does nothing.
 
-### Final commit check (to be filled and signed by the owner)
+### Final commit check (ce55dc9)
 
-Not yet done. Run it on the commit that will be packaged and uploaded, with the extension reloaded from that commit.
-It needs one Explain and one Best move on a finished chess.com game, each with the position copied by **Copy FEN**.
-Leave nothing as "not recorded".
+Run by the owner on 2026-11-20 on commit `ce55dc9` (version 1.0.0), extension reloaded from that commit, on a
+finished chess.com game. The owner sent the two Copy FEN strings below and wrote "everything looks good".
+Lines marked *derived* were worked out by the coordinator from those FENs, not reported by the owner.
 
 ```
-Date:
-Commit hash (git rev-parse --short HEAD):
-Extension version (chrome://extensions):
-Site and page (chess.com Game Review or Analysis, finished game):
+Date: 2026-11-20
+Commit hash: ce55dc9
+Extension version: 1.0.0
+Site and page: chess.com, finished game
 
 Explain
-  Selected move:
-  Button pressed (its exact label):
-  Expected position (FEN before the selected move):
-  Copy FEN from the answer:
-  Do they match (placement, side to move, castling, en passant)?
+  Selected move: 29.Rg3 (derived: the two FENs differ only by Rg1-g3)
+  Button pressed: Explain 29.Rg3 (derived from the selected move)
+  Copy FEN from the answer: r5k1/5pp1/p3r3/8/1N1p1q1P/P2P1b1P/P1P2P1K/1R2Q1R1 w - - 1 29
+  Matches the position before 29.Rg3: yes (White to move, no castling, no en passant, clocks 1 29)
 
 Best move
-  Selected move:
-  Button pressed (its exact label):
-  Expected position (FEN after the selected move):
-  Copy FEN from the answer:
-  Do they match (placement, side to move, castling, en passant)?
+  Selected move: 29.Rg3
+  Button pressed: Best move for Black (derived)
+  Copy FEN from the answer: r5k1/5pp1/p3r3/8/1N1p1q1P/P2P1bRP/P1P2P1K/1R2Q3 b - - 2 29
+  Matches the position after 29.Rg3: yes. AQChess.replay(first FEN, ["Rg3"]) returns exactly this string.
 
-Launcher hidden on a game in progress (yes / no / not checked):
-Keyboard shortcut (key shown in the panel footer, and whether it opens the panel):
-Anything wrong or surprising:
-Signed by the owner (name and date):
+Launcher hidden on a game in progress, and Alt+Q (⌥Q) opening the panel: covered by the owner's
+  "everything looks good"; no individual result reported.
+Anything wrong or surprising: none reported.
+Confirmed by the owner in the session on 2026-11-20 ("everything looks good").
 ```
 
 ### lichess (optional)
