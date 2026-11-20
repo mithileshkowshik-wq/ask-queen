@@ -29,6 +29,7 @@ This is the shared interface between the **logic work** (GPT-6.2-sol) and the **
   - `icons/16.png`, `icons/48.png` and `icons/128.png` may be regenerated
 
 ## Load order
+- **Key guard (fix pass 2):** `content/keyguard.js` is its own `content_scripts` entry with `run_at: "document_start"`, so its window capture listener runs before any site listener. For `keydown`/`keyup`/`keypress` whose `composedPath()` includes the `aq-host` element it calls `stopImmediatePropagation()` (no `preventDefault`, so Tab, Enter and Space keep their default actions), and on Escape inside the open panel it clicks `[data-testid="aq-close"]`. The panel's own key listeners therefore no longer see panel keys; Escape-to-close goes through the Close button's handler.
 - **Content scripts:** `content/chess.js`, then `content/common.js`, `content/lichess.js`, `content/chesscom.js`, and `content/panel.js` last.
 - **Background:** `background.js` loads `content/chess.js` with `importScripts("content/chess.js")`, so `chess.js` must not touch the DOM.
 
@@ -70,30 +71,39 @@ Returns `null` when there is no board at all. Otherwise it returns:
 }
 ```
 **Rules**
+- A board with a moving, dragged or fading piece has `valid: false` and `reason: "The board is moving"`. The panel re-reads on the next mutation; a partial scan is never sent (fix pass 2).
 - If `crossCheck.ok` is false, `moves` must be `null` and `root` must not claim to be verified. The panel shows the "disagree" banner (§3.3).
 - `fen6` is set only when the page exposes an exact FEN tied to the board. All six fields are kept.
+
+## `AQ.gate()` (content scripts, fix pass 2)
+Returns `{ hasBoard: bool, gate: null | "in_progress" | "variant" | "puzzle" | "unknown_context" }` from the URL and cheap selector checks only: no `getBoundingClientRect`, `getComputedStyle` or other layout reads (visibility is judged only by `[hidden]`/`aria-hidden`). `gate` is `null` when `hasBoard` is false. The closed panel uses it to show or hide the launcher; `readPosition()` (with layout reads) stays the authority when the panel opens and at click time. A unit test checks that it agrees with `readPosition().gate` on every fixture with layout reads made to throw.
 
 ## Messages
 **Long-lived request:** the panel opens `chrome.runtime.connect({ name: "queen" })` and posts:
 ```
 { type: "ask", mode: "explain" | "best", fen, moves: "e4 e5 …", played: SAN | null,
-  snapshot: { placement, side }, fresh: bool }
+  snapshot: { placement, side, castle?, ep? }, fresh: bool, prefer?: "other" }
 ```
+- `snapshot.castle` and `snapshot.ep` (fix pass 2) are sent together, and only when `board.fen6` is set; they are fen6's third and fourth fields. The background then also requires, for Best, returned castling and en passant equal to them, and for Explain, returned castling that includes every right in `snapshot.castle` (rights only shrink). Otherwise `positionCheck` is `"mismatch"`.
+- `prefer: "other"` is only valid with `fresh: true` ("Try the other server").
+- `moves` and `played` may carry `+`, `#` and annotation glyphs as the page shows them; the background strips them before validation, caching and the Space call.
 `fen` is the root FEN (six fields). For Explain, `moves` are the moves *before* the played move. The background validates the request per §1: `sender.id`, the FEN regex, strict SAN, and the length caps.
 
 **Background → panel**, on the same port:
 - `{ status: "connecting" | "waiting" | "still_waiting" | "backup" | "keepalive", server: "boneyland" | "hugging-apps" | "custom" }`
 - `{ result: R }`
-- `{ error: { code, detail } }`, where `code` is one of the §4.4 codes: `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, `all_unavailable`.
+- `{ error: { code, detail, retryAfter?, reason? } }` (`detail` is a plain string; `retryAfter` is seconds from a `Retry-After` header on a 429/503; `reason: "other_tab"` with `code: "busy"` means another tab's ask holds the one-in-flight slot, with `detail` "Another tab is already asking Queen."), where `code` is one of the §4.4 codes: `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, `all_unavailable`.
 
 Disconnecting the port means cancel. The background aborts within 1 s.
+
+Every string in `R` and in errors has the saved token, and any `hf_` token-shaped text, replaced with `[token removed]` as the last step before posting (also when `*`, `_`, `` ` `` or `~` are wedged between its characters).
 
 **Normalized result `R`:**
 ```
 { server, seconds, cached: bool, fen, analysis: string /* model prose, plain text, raw tokens removed, player/opponent→White/Black */,
   best: { san, uci, source: "structured" | "prose_verified" } | null,
   suggestion: { san, source: "prose_unverified" } | null,
-  evaluation: number | null, evaluationText: string | null /* e.g. "Black is slightly better (≈ −0.3)" */,
+  evaluation: number | null, evaluationText: string | null /* the model's EVALUATION sentence when boneyland sends one (it names the side), else built from a number */,
   criticalLine: string | null /* numbered SAN */, truncated: bool, moveSource: string,
   positionCheck: "ok" | "mismatch" }
 ```

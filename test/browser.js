@@ -141,7 +141,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
       if (HOSTS.has(url.hostname)) return route.continue();
       if (url.protocol === "chrome-extension:") return route.continue();
       const id = url.searchParams.get("aqFixture");
-      if (id && SITES[id]?.url === url.origin + url.pathname && req.resourceType() === "document") {
+      url.searchParams.delete("aqFixture");
+      if (id && SITES[id]?.url === url.href && req.resourceType() === "document") {
         return route.fulfill({ contentType: "text/html; charset=utf-8", body: SITES[id].html });
       }
       if (req.resourceType() !== "favicon" && url.pathname !== "/favicon.ico") outside.push(req.url());
@@ -171,7 +172,9 @@ async function runBrowser(extension, temp, out, test, packaged) {
       try {
         if (options.viewport) await page.setViewportSize(options.viewport);
         if (options.instrument) await page.addInitScript(options.instrument);
-        await page.goto(SITES[id].url + "?aqFixture=" + id, { waitUntil: "domcontentloaded" });
+        const url = new URL(SITES[id].url);
+        url.searchParams.set("aqFixture", id);
+        await page.goto(url.href, { waitUntil: "domcontentloaded" });
         assert.equal(await page.locator("html").getAttribute("data-fixture"), id);
         const ui = uiFor(page);
         await ui("host").waitFor({ state: "attached" });
@@ -252,7 +255,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
             assert.equal(await ui("panel").isVisible(), false);
           } else {
             await ui("launcher").click();
-            if (e.unreadable) assert.match(await ui("ask").textContent(), /Can't read this board/i);
+            if (e.unreadable) assert.match(await ui("ask").textContent(), e.moving ? /Can't read this board|moving/i : /Can't read this board/i);
             if (e.disagree) assert.match(await ui("disagree").textContent(), /disagree/i);
             if (e.mate) {
               assert.match(await ui("game-over").textContent(), /game is over here/i);
@@ -264,8 +267,25 @@ async function runBrowser(extension, temp, out, test, packaged) {
           if (stateFor[id]) await shot(page, stateFor[id]);
           if (e.fen) {
             await clickAsk(ui, e);
+            if (e.mismatch) {
+              // The line widened the page's exact castling rights: no answer, and "Work from the pieces" sends fen6.
+              await code(ui, "mismatch");
+              await shot(page, "error-rights-mismatch");
+              await ui("error-action").click();
+              await ui("best").click();
+              await output(ui, "result");
+              assert.deepEqual(posts(since).map((r) => r.body.data.slice(0, 2)), [[e.fen, e.moves], [e.exact, ""]]);
+              return;
+            }
             await output(ui, "result");
             assert.deepEqual(posts(since).map((r) => r.body.data.slice(0, 2)), [[e.fen, e.moves]]);
+            if (id === "lichess-recorded") {
+              assert.match(await ui("headline").textContent(), /4\.Nxe5/);
+              assert.equal((await ui("eval").textContent()).trim().replace(/^Evaluation:?\s*/i, ""),
+                "White is better by approximately 1.51 pawns, retaining the extra pawn and a modest space advantage after the best play.");
+              assert.match(await ui("line").textContent(), /4\.Nxe5 Qf6 5\.O-O Ne6 6\.d4 d6/);
+              await shot(page, "result-evaluation");
+            }
           } else {
             await sleep(200);
             assert.equal(posts(since).length, 0);
@@ -278,6 +298,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
       ["lichess-in-progress", "navigated-in-progress", /available after the game ends/i],
       ["chesscom-960", "navigated-variant", /only knows standard chess/i],
       ["lichess-puzzle", "navigated-puzzle", /isn't available on puzzles/i],
+      ...["live-tab-review", "daily-tab-review", "live-review", "analysis-daily", "analysis-live"].map((id) =>
+        ["chesscom-" + id, "navigated-chesscom-" + id, /available after the game ends/i]),
     ]) {
       await test("Open panel navigation gate " + id, async () => {
         const { since } = await setup();
@@ -354,11 +376,16 @@ async function runBrowser(extension, temp, out, test, packaged) {
     for (const error of ["quota", "token_rejected", "unreachable", "asleep", "busy", "illegal_position", "game_over",
       "bad_response", "all_unavailable", "mismatch"]) {
       await test("Browser error " + error, async () => {
-        const { since } = await setup(error);
+        const { since } = await setup(error, error === "token_rejected" ? { token: "hf_RejectedFixture12345" } : {});
         await withPage("lichess-analysis", async (page, ui) => {
           await ui("launcher").click();
           await ui("best").click();
           await code(ui, error);
+          if (error === "busy") {
+            // The mock sends Retry-After: 20; the retry stays off and counts down.
+            assert.match(await ui("error-action").textContent(), /Try again in \d+ s/);
+            assert(await ui("error-action").isDisabled());
+          }
           await shot(page, "error-" + error);
           assert.equal(posts(since).length, ["unreachable", "asleep", "all_unavailable"].includes(error) ? 2 : 1);
           if (["mismatch", "illegal_position"].includes(error)) {
@@ -477,6 +504,19 @@ async function runBrowser(extension, temp, out, test, packaged) {
       });
     });
 
+    await test("Browser token echoed by a server never appears in the panel", async () => {
+      const token = "hf_EchoedToken12345678";
+      await setup("echo", { token });
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        const text = await page.evaluate((host) => document.querySelector(host).shadowRoot.textContent, selectors.host);
+        assert.match(text, /\[token removed\]/);
+        assert(!text.replace(/[*_\x60~\s]/g, "").includes(token.slice(3)), "token reassembled in the panel");
+      });
+    });
+
     await test("Browser keyboard-only ask, Escape and site shortcut isolation", async () => {
       const { since } = await setup();
       await withPage("chesscom-review", async (page, ui) => {
@@ -487,21 +527,25 @@ async function runBrowser(extension, temp, out, test, packaged) {
           }
           throw new Error("Keyboard could not reach intended control");
         };
+        // Site handlers in both phases, on window and document, registered after the extension loaded.
         await page.evaluate(() => {
           window.siteShortcutCount = 0;
-          document.addEventListener("keydown", () => window.siteShortcutCount++);
+          const count = () => window.siteShortcutCount++;
+          for (const target of [window, document]) for (const capture of [true, false]) target.addEventListener("keydown", count, capture);
         });
         await ui("launcher").waitFor();
         await focus(ui("launcher"), "Tab");
         await page.keyboard.press("Enter");
         await ui("panel").waitFor();
         assert(await ui("panel").evaluate((el) => el.getRootNode().activeElement === el));
-        await page.evaluate(() => { window.siteShortcutCount = 0; });
+        await page.evaluate(() => { window.siteShortcutCount = 0; window.siteEarlyKeys = 0; });
         await focus(ui("explain"), "Tab");
         await page.keyboard.press("Enter");
         await output(ui, "result");
         assert.equal(posts(since).length, 1);
         assert.equal(await page.evaluate(() => window.siteShortcutCount), 0);
+        // The page's own window capture listener, registered while the page parsed (before document_idle), saw none.
+        assert.equal(await page.evaluate(() => window.siteEarlyKeys), 0);
         await page.keyboard.press("Escape");
         await ui("panel").waitFor({ state: "hidden" });
         assert(await ui("launcher").evaluate((el) => el.getRootNode().activeElement === el));
@@ -519,10 +563,30 @@ async function runBrowser(extension, temp, out, test, packaged) {
           timer: document.querySelector('[data-testid="aq-host"]').shadowRoot.querySelectorAll('[data-testid="aq-timer"]').length }));
         const proxy = await ctx.newCDPSession(page);
         const counts = () => proxy.send("Memory.getDOMCounters");
-        let baseline;
+        // Count real timers in the content scripts' world: every setTimeout/setInterval still pending.
+        await isolated(page, () => {
+          const live = globalThis.aqLiveTimers = new Set();
+          const wrap = (set, once) => {
+            const original = globalThis[set];
+            globalThis[set] = (fn, ms, ...args) => {
+              const id = original((...a) => { if (once) live.delete(id); if (typeof fn === "function") fn(...a); }, ms, ...args);
+              live.add(id);
+              return id;
+            };
+          };
+          wrap("setTimeout", true);
+          wrap("setInterval", false);
+          for (const clear of ["clearTimeout", "clearInterval"]) {
+            const original = globalThis[clear];
+            globalThis[clear] = (id) => { live.delete(id); return original(id); };
+          }
+          return true;
+        });
+        const timers = async () => { await sleep(1500); return isolated(page, () => globalThis.aqLiveTimers.size); };
+        let baseline, baseTimers;
         // The first open builds the panel's controls, so the baseline is taken after one round trip.
         for (let i = -1; i < 10; i++) {
-          if (i === 0) { await proxy.send("HeapProfiler.collectGarbage"); baseline = await counts(); }
+          if (i === 0) { baseTimers = await timers(); await proxy.send("HeapProfiler.collectGarbage"); baseline = await counts(); }
           await ui("launcher").click();
           await navigate(page, i % 2 ? "chesscom-analysis" : "chesscom-review");
           await ui("explain").waitFor();
@@ -531,6 +595,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
           assert.equal(await ui("host").count(), 1);
           assert.equal(await ui("launcher").count(), 1);
         }
+        assert.equal(await timers(), baseTimers, "pending timers after 10 navigations");
         await proxy.send("HeapProfiler.collectGarbage");
         const after = await counts();
         assert.equal(after.jsEventListeners, baseline.jsEventListeners);
@@ -586,6 +651,122 @@ async function runBrowser(extension, temp, out, test, packaged) {
         });
       });
     }
+
+    // Nothing past the viewport edge and every control target at least 24×24 px (inline links in text excepted).
+    const layoutProblems = (page, host) => page.evaluate((host) => {
+      const root = host ? document.querySelector(host).shadowRoot : document;
+      const scope = host ? root.querySelector('[data-testid="aq-panel"]') : document.documentElement;
+      const box = scope.getBoundingClientRect(), problems = [];
+      if (box.left < -0.5 || box.top < -0.5 || box.right > innerWidth + 0.5 || (host && box.bottom > innerHeight + 0.5))
+        problems.push("outside the viewport: " + JSON.stringify(box));
+      if (scope.scrollWidth > scope.clientWidth + 1) problems.push("horizontal overflow " + scope.scrollWidth + " > " + scope.clientWidth);
+      for (const el of root.querySelectorAll("button, input, select, textarea, summary, a")) {
+        if (!el.getClientRects().length || el.closest("p, li")) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 24 || r.height < 24) problems.push(`${el.dataset.testid || el.id || el.localName} is ${Math.round(r.width)}×${Math.round(r.height)}`);
+      }
+      return problems;
+    }, host);
+    for (const viewport of [{ width: 320, height: 568 }, { width: 640, height: 400 }]) {
+      const size = viewport.width + "x" + viewport.height;
+      await test("Browser panel and options fit " + size + " with 24 px targets", async () => {
+        await setup();
+        await withPage("lichess-analysis", async (page, ui) => {
+          await ui("launcher").click();
+          await ui("explain").waitFor();
+          assert.deepEqual(await layoutProblems(page, selectors.host), [], "ask view");
+          await shot(page, "narrow-ask-" + size);
+          await ui("best").click();
+          await output(ui, "result");
+          assert.deepEqual(await layoutProblems(page, selectors.host), [], "result view");
+          await shot(page, "narrow-result-" + size);
+        }, { viewport });
+        const page = await ctx.newPage();
+        try {
+          await page.setViewportSize(viewport);
+          await page.goto(new URL("options.html", (await worker(ctx)).url()).href);
+          assert.deepEqual(await layoutProblems(page, null), [], "options");
+          await page.screenshot({ path: path.join(out, "narrow-options-" + size + ".png"), fullPage: true });
+        } finally { await page.close(); }
+      });
+    }
+
+    await test("Browser options: token format, masked token, Remove, exact-origin permission and per-origin consent", async () => {
+      const sw = await worker(ctx);
+      const stored = (keys) => sw.evaluate((keys) => chrome.storage.local.get(keys), keys);
+      await sw.evaluate(() => chrome.storage.local.remove(["token", "tokenFor", "custom"]));
+      const page = await ctx.newPage();
+      try {
+        await page.goto(new URL("options.html", sw.url()).href);
+        const t = (id) => page.locator(`[data-testid="opt-${id}"]`);
+        await t("token").fill("hf_short");
+        await t("token-save").click();
+        assert.match(await t("token-error").textContent(), /doesn't look like/i);
+        assert.equal((await stored("token")).token, undefined);
+        const token = "hf_OptionsFixture1234567";
+        await t("token").fill(token);
+        await t("token-save").click();
+        await until(async () => (await t("saved-token").textContent()).includes("hf_…4567"));
+        assert.equal((await stored("token")).token, token);
+        // The full token is in neither the markup nor any field value, also after a reload.
+        const dom = () => page.evaluate(() => document.documentElement.outerHTML + [...document.querySelectorAll("input")].map((i) => i.value).join(" "));
+        assert(!(await dom()).includes(token));
+        await page.reload();
+        await until(async () => (await t("saved-token").textContent()).includes("hf_…4567"));
+        assert(!(await dom()).includes(token));
+        // Stub Chrome's permission prompt and record exactly what is asked for.
+        await page.evaluate(() => {
+          window.aqAsked = [];
+          chrome.permissions.request = async (p) => { window.aqAsked.push(p); return true; };
+          chrome.permissions.remove = async () => true;
+        });
+        const first = "https://queentest.hf.space", second = "https://other-space.hf.space";
+        await t("custom-origin").fill(first + "/some/page");
+        await t("custom-consent").check();
+        await t("custom-save").click();
+        await until(async () => (await stored("custom")).custom?.origin === first);
+        assert.deepEqual((await stored("tokenFor")).tokenFor, [first]);
+        await page.screenshot({ path: path.join(out, "options-saved.png"), fullPage: true });
+        // A different server needs its own opt-in: the earlier consent is not carried over.
+        await t("custom-origin").fill(second);
+        await t("custom-save").click();
+        await until(async () => (await stored("custom")).custom?.origin === second);
+        assert.deepEqual((await stored("tokenFor")).tokenFor, []);
+        assert.deepEqual(await page.evaluate(() => window.aqAsked), [{ origins: [first + "/*"] }, { origins: [second + "/*"] }]);
+        await t("token-remove").click();
+        await until(async () => (await stored("token")).token === undefined);
+        assert.doesNotMatch(await t("saved-token").textContent(), /hf_/);
+      } finally {
+        await page.close();
+        await sw.evaluate(() => chrome.storage.local.remove(["token", "tokenFor", "custom"]));
+      }
+    });
+
+    await test("Browser quota recovery: add a token in Settings, then retry on the same page", async () => {
+      const { since } = await setup("quota-token");
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await code(ui, "quota");
+        assert.match(await ui("error-action").textContent(), /token/i);
+        const opened = ctx.waitForEvent("page", { predicate: (p) => p.url().endsWith("/options.html"), timeout: WAIT });
+        await ui("error-action").click();
+        const options = await opened;
+        await options.waitForLoadState("domcontentloaded");
+        const token = "hf_QuotaRecovery1234567";
+        await options.locator('[data-testid="opt-token"]').fill(token);
+        await options.locator('[data-testid="opt-token-save"]').click();
+        await until(async () => /saved/i.test(await options.locator('[data-testid="opt-token-status"]').textContent()));
+        await options.close();
+        await page.bringToFront();
+        assert.match(await ui("error-action").textContent(), /Try again/);
+        await ui("error-action").click();
+        await output(ui, "result");
+        const sent = posts(since);
+        assert.deepEqual(sent.map((r) => r.auth), [undefined, "Bearer " + token]);
+        await shot(page, "result-after-token");
+      });
+    });
 
     await test("Browser options render and pass axe", async () => {
       const page = await ctx.newPage();

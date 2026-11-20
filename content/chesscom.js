@@ -7,24 +7,35 @@
   const FIGURINES = { n: "N", b: "B", r: "R", q: "Q", k: "K",
     "♘": "N", "♞": "N", "♗": "B", "♝": "B", "♖": "R", "♜": "R", "♕": "Q", "♛": "Q", "♔": "K", "♚": "K" };
 
-  function scope() {
+  const RESULT = /^\s*(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2\s*[-–]\s*1\/2)\s*$/;
+  // PGN is exposed in the share panel's textarea (or a data-pgn attribute); only text that starts with a tag counts.
+  const pgnText = () => [...document.querySelectorAll("textarea, [data-pgn]")].map((el) => el.value ?? el.dataset.pgn)
+    .filter((text) => /^\s*\[\w+\s+"/.test(text || "")).join("\n");
+
+  // Fail closed. Puzzles and variants first. Any page tied to a game (/game/…, /analysis/game/…, Game Review) needs a
+  // finished game on screen: a result token or a game-over container. "tab=review" and "/review" only label the page.
+  // Only the standalone analysis board (no game id) is open without that evidence.
+  function scope(visible, pgn) {
     const path = location.pathname;
     const analysis = /^\/analysis(?:\/|$)/i.test(path);
     const review = /\/review\/?$/i.test(path) || new URLSearchParams(location.search).get("tab") === "review";
-    const game = /^\/(?:game|play|live|daily)(?:\/|$)/i.test(path);
+    const game = /^\/(?:analysis\/)?(?:game|play|live|daily)(?:\/|$)/i.test(path);
     const page = review ? "review" : analysis ? "analysis" : game ? "game" : "unknown";
     if (/^\/(?:puzzles?|daily-chess-puzzle)(?:\/|$)/i.test(path)) return { page, gate: "puzzle" };
+    const variant = AQ.tag(pgn, "Variant");
     if (/\/(?:variants?|chess960|crazyhouse|bughouse|atomic|three-check|king-of-the-hill|four-player-chess)(?:\/|$)/i.test(path) ||
+        (variant && !/^(?:standard|chess)$/i.test(variant)) ||
         [...document.querySelectorAll(".variant-badge, .game-variant, [data-game-variant]")].some((el) => {
-          const variant = el.dataset.gameVariant || el.textContent.trim();
-          return AQ.visible(el) && !/^(?:standard|standard chess|chess|rapid|blitz|bullet|daily)$/i.test(variant);
+          const name = el.dataset.gameVariant || el.textContent.trim();
+          return visible(el) && !/^(?:standard|standard chess|chess|rapid|blitz|bullet|daily)$/i.test(name);
         })) return { page, gate: "variant" };
-    if (analysis || review) return { page, gate: null };
-    const finished = [...document.querySelectorAll(
-      ".game-over-modal, .game-over-header, [data-game-status='finished'], .game-result, .game-over, .board-layout-sidebar .result")].some((el) =>
-      AQ.visible(el) && (el.matches(".game-over-modal, .game-over-header, [data-game-status='finished'], .game-over") ||
-        /1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2\s*[-–]\s*1\/2|checkmate|resign|draw|timeout|abandoned/i.test(el.textContent)));
-    return { page, gate: game ? (finished ? null : "in_progress") : "unknown_context" };
+    if (analysis && !game && !review) return { page, gate: null };
+    if (!game) return { page, gate: "unknown_context" };
+    const finished = [...document.querySelectorAll(".game-over-modal, .game-over-header, .game-over-modal-content")].some(visible) ||
+      [...document.querySelectorAll(".game-result, .board-layout-sidebar .result, [data-game-result]")]
+        .some((el) => visible(el) && RESULT.test(el.dataset.gameResult || el.textContent)) ||
+      RESULT.test(AQ.tag(pgn, "Result") || "");
+    return { page, gate: finished ? null : "in_progress" };
   }
 
   function san(el) {
@@ -65,9 +76,9 @@
       if (line.some((n, i) => n.dataset.node && n.dataset.node !== "0-" + i)) return null;
     }
     const first = line[0];
-    const row = first?.closest(".main-line-row, .move-row");
+    const row = first?.closest("[data-whole-move-number], .main-line-row, .move-row");
     const number = row?.querySelector(".move-number, .move-index, [data-move-number]");
-    const label = number?.dataset.moveNumber || number?.textContent.trim();
+    const label = row?.dataset.wholeMoveNumber || number?.dataset.moveNumber || number?.textContent.trim();
     const custom = first?.matches(".black-move, [data-color='black']") || (!!label && !/^1\.?$/.test(label));
     return { moves: line.map(san), custom };
   }
@@ -90,16 +101,19 @@
   AQ.adapters.push({
     name: "chess.com",
     matches: () => location.hostname === "www.chess.com" && AQ.hasBoard(BOARD),
+    gate: () => scope(AQ.shown, pgnText()).gate,
     read() {
       const el = AQ.mainBoard(BOARD, ".board-layout-main, .board-layout-chessboard, [data-main-board]");
       if (!el) return null;
       const board = readBoard(el);
       const raw = moves();
-      const context = scope();
+      const pgn = pgnText();
+      const context = scope(AQ.visible, pgn);
       const exactFen = [el.getAttribute("data-fen"), el.getAttribute("fen")].find(C.parseFen);
-      const custom = raw?.custom || (raw?.moves.length === 0 && exactFen && exactFen !== C.START_FEN) ||
-        new URLSearchParams(location.search).has("fen");
-      return AQ.position({ ...context, board, line: AQ.root(raw?.moves, { custom }), exactFen });
+      // A PGN [FEN] tag is the trusted custom root; [SetUp] without it, or any other custom sign, blocks replay.
+      const custom = raw?.custom || /\[\s*(?:FEN|SetUp)\b/i.test(pgn) ||
+        (raw?.moves.length === 0 && exactFen && exactFen !== C.START_FEN) || new URLSearchParams(location.search).has("fen");
+      return AQ.position({ ...context, board, line: AQ.root(raw?.moves, { fen: AQ.tag(pgn, "FEN"), custom }), exactFen });
     },
   });
 })();

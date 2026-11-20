@@ -19,8 +19,10 @@ First version prepared for the Chrome Web Store.
 - **Out-of-date answers** are marked when the board moves, with one button to ask about the new position.
 - **"Try the other server"** on answers that were cut off.
 - **Settings:** Remove token, a token format check, a custom server on your own Hugging Face Space, and a separate
-  consent before your token is sent to it.
+  consent before your token is sent to it. The consent belongs to one address and is cleared when the address changes.
 - **Dock left or right**, remembered.
+- **Retry timing.** When a server says how long to wait, the retry button counts down. A question from another tab
+  gets its own message: "Another tab is already asking Queen".
 - **Privacy policy, licence, this changelog,** and the Chrome Web Store listing material in `store/`.
 - A 32 px icon.
 

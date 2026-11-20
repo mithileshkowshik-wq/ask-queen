@@ -61,28 +61,48 @@ $("primary").addEventListener("change", async () => {
 });
 
 // --- custom server ---
-$("origin").addEventListener("input", () => { say("custom-error"); say("custom-status"); });
+// Consent to send the token belongs to one origin: the one shown in the checkbox label when it was ticked.
+// Typing a different address, saving, or removing the server clears it, so it can never carry over.
+let consentFor = "";
+const typedOrigin = () => {
+  try {
+    const origin = new URL($("origin").value.trim()).origin;
+    return ORIGIN.test(origin) ? origin : "";
+  } catch { return ""; }
+};
+function resetConsent() {
+  const origin = typedOrigin();
+  consentFor = "";
+  $("consent").checked = false;
+  $("consent").disabled = !origin;
+  say("consent-label", origin ? `Send my Hugging Face token to ${origin}` : "Send my Hugging Face token to this server too");
+}
+$("origin").addEventListener("input", () => {
+  say("custom-error");
+  say("custom-status");
+  if (!consentFor || typedOrigin() !== consentFor) resetConsent();
+});
+$("consent").addEventListener("change", () => { consentFor = $("consent").checked ? typedOrigin() : ""; });
 
 $("custom-form").addEventListener("submit", (e) => {
   e.preventDefault();
   say("custom-status");
-  const typed = $("origin").value.trim();
-  let origin = "";
-  try { origin = new URL(typed).origin; } catch {}
-  if (!ORIGIN.test(origin)) {
+  const typed = $("origin").value.trim(), origin = typedOrigin();
+  if (!origin) {
     say("custom-error", /huggingface\.co/i.test(typed)
       ? "Use the Space's own address, like https://your-name-your-space.hf.space, not its huggingface.co page."
       : "Enter the address of a Hugging Face Space, like https://your-name-your-space.hf.space.");
     return $("origin").focus();
   }
-  const api = $("api").value, consent = $("consent").checked;
+  const api = $("api").value, consent = $("consent").checked && consentFor === origin; // ticked for this exact origin
   // Ask Chrome for this one origin only. The request must start inside the click, before any await.
   chrome.permissions.request(pattern(origin)).then(async (granted) => {
     if (!granted) return say("custom-error", `Chrome wasn't allowed to reach ${origin}, so nothing was saved.`);
     const { custom } = await store.get("custom");
     if (ORIGIN.test(custom?.origin) && custom.origin !== origin) await chrome.permissions.remove(pattern(custom.origin)).catch(() => {});
-    await store.set({ custom: { origin, api }, tokenFor: consent ? [origin] : [] });
+    await store.set({ custom: { origin, api }, tokenFor: consent ? [origin] : [] }); // replaces any earlier approval
     $("origin").value = "";
+    resetConsent();
     say("custom-error");
     await render();
     say("custom-status", "Saved. Choose it under Server to ask it first.");
@@ -94,10 +114,11 @@ $("custom-remove").addEventListener("click", async () => {
   await store.remove(["custom", "tokenFor"]);
   if (primary === "custom") await store.set({ primary: "boneyland" });
   if (ORIGIN.test(custom?.origin)) await chrome.permissions.remove(pattern(custom.origin)).catch(() => {});
-  $("consent").checked = false;
+  resetConsent();
   await render();
   say("custom-status", "Custom server removed, along with Chrome's access to it.");
   $("origin").focus();
 });
 
+resetConsent();
 render();

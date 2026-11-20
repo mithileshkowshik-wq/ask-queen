@@ -27,6 +27,9 @@ Home page: ____________________
 
 ## 4. Upload the dashboard draft
 
+- [ ] Confirm that stable Chrome is at or above `minimum_chrome_version` in `manifest.json` (check
+      `chrome://version` on a stable install). The value is the Chromium version the tests run on. If stable Chrome
+      is older, users can't install the extension yet: wait, or lower the value and run the tests on that version.
 - [ ] Run the tests: `cd test && npm test`.
 - [ ] Build the zip: `sh scripts/package.sh`, which writes `dist/ask-queen-<version>.zip`.
 - [ ] Upload the zip as a draft.

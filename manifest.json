@@ -36,6 +36,16 @@
         "https://lichess.org/*"
       ],
       "js": [
+        "content/keyguard.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.chess.com/*",
+        "https://lichess.org/*"
+      ],
+      "js": [
         "content/chess.js",
         "content/common.js",
         "content/lichess.js",

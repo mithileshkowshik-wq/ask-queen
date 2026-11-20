@@ -38,17 +38,21 @@ async function staticTests(temp) {
     assert.deepEqual(manifest.permissions, ["storage"]);
     assert.deepEqual(manifest.host_permissions, ["https://boneyland-queen-pawn-8.hf.space/*", "https://hugging-apps-queen-pawn-8.hf.space/*"]);
     assert.deepEqual(manifest.optional_host_permissions, ["https://*.hf.space/*"]);
-    assert.deepEqual(manifest.content_scripts[0].matches, ["https://www.chess.com/*", "https://lichess.org/*"]);
-    assert.notEqual(manifest.content_scripts[0].all_frames, true);
-    assert.equal(manifest.content_scripts[0].js[0], "content/chess.js");
-    assert.equal(manifest.content_scripts[0].js.at(-1), "content/panel.js");
+    // A document_start key guard, then the main scripts at document_idle with chess.js first and panel.js last.
+    const [guard, main] = manifest.content_scripts;
+    assert.equal(manifest.content_scripts.length, 2);
+    assert.deepEqual(guard, { matches: main.matches, js: ["content/keyguard.js"], run_at: "document_start" });
+    assert.deepEqual(main.matches, ["https://www.chess.com/*", "https://lichess.org/*"]);
+    assert.notEqual(main.all_frames, true);
+    assert.equal(main.js[0], "content/chess.js");
+    assert.equal(main.js.at(-1), "content/panel.js");
     assert.equal("web_accessible_resources" in manifest, false);
     assert.equal("externally_connectable" in manifest, false);
     assert.deepEqual(Object.keys(manifest.icons), ["16", "32", "48", "128"]);
     assert(manifest.description.length <= 132);
   });
   await test("Shipped JavaScript parses with no dynamic code execution", () => {
-    for (const file of [manifest.background.service_worker, ...manifest.content_scripts[0].js, "options.js"]) {
+    for (const file of [manifest.background.service_worker, ...manifest.content_scripts.flatMap((c) => c.js), "options.js"]) {
       execFileSync(process.execPath, ["--check", path.join(REPO, file)]);
       assert.doesNotMatch(fs.readFileSync(path.join(REPO, file), "utf8"), /\beval\s*\(|\bnew Function\s*\(/, file);
     }
@@ -67,7 +71,7 @@ async function staticTests(temp) {
     assert.equal(archive, "dist/ask-queen-" + manifest.version + ".zip");
     const members = execFileSync("unzip", ["-Z1", archive], { cwd: REPO, encoding: "utf8" }).trim().split("\n");
     const expected = ["manifest.json", "background.js", "options.html", "options.js", "LICENSE",
-      ...manifest.content_scripts[0].js, ...Object.values(manifest.icons)];
+      ...manifest.content_scripts.flatMap((c) => c.js), ...Object.values(manifest.icons)];
     const locales = path.join(REPO, "_locales");
     if (fs.existsSync(locales)) expected.push(...fs.readdirSync(locales).map((locale) => "_locales/" + locale + "/messages.json"));
     assert.deepEqual(members.sort(), expected.sort());

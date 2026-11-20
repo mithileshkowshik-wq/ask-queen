@@ -112,9 +112,11 @@
       (!move.rank || move.rank === from[1]) && root.placement[from] === colored(move.piece, root.side);
   }
 
+  // snapshot.castle/ep are present only when the page exposed an exact FEN; then they must match too.
   function verifyBest(fen, snapshot) {
     const root = parseFen(fen);
-    return !!root && root.side === snapshot?.side && placementToString(root.placement) === snapshot.placement;
+    return !!root && root.side === snapshot?.side && placementToString(root.placement) === snapshot.placement &&
+      (snapshot.castle === undefined || (root.castle === snapshot.castle && root.ep === snapshot.ep));
   }
 
   // Check one move's geometry and footprint. The server is responsible for check and mate legality.

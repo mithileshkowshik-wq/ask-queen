@@ -86,7 +86,8 @@ function runPanelTests(test) {
           assert(bg.validAsk(s.calls[0]));
           const answer = bg.normalized([{ fen: e.replyFen, analysis: "Develop.", best_move_san: null }],
             "boneyland", s.calls[0], "boneyland", 1);
-          assert.equal(answer.positionCheck, "ok");
+          // With an exact FEN on the page the panel sends its rights, and a line that widens them is a mismatch.
+          assert.equal(answer.positionCheck, e.mismatch ? "mismatch" : "ok");
           s.events.message({ result: answer });
           assert(s.element("headline"));
         }
@@ -159,6 +160,21 @@ function runPanelTests(test) {
       assert.equal(s.calls.length, 2);
       assert.equal(s.calls[1].fen, F.START);
       assert.equal(s.calls[1].moves, "");
+    } finally { await s.close(); }
+  });
+  test("A click on another line's move while an ask is in flight cancels it and asks about the new move", async () => {
+    const s = await panelFixture("lichess-sibling-nf3");
+    try {
+      await s.open();
+      assert.equal(s.element("explain").textContent, "Explain 2.Nf3");
+      s.click("explain");
+      s.w.document.body.innerHTML = F.SITES["lichess-sibling-bc4"].html.match(/<body>([\s\S]*)<\/body>/)[1];
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.equal(s.element("explain").textContent, "Explain 2.Bc4");
+      s.click("explain");
+      assert.equal(s.disconnected, 1);
+      assert.deepEqual(s.calls.map((c) => c.played), ["Nf3", "Bc4"]);
+      assert.equal(s.calls[1].moves, "e4 e5");
     } finally { await s.close(); }
   });
   test("Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes", async () => {

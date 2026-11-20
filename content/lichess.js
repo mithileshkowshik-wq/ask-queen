@@ -6,9 +6,11 @@
   const VARIANT_NAME = /chess\s*960|crazyhouse|antichess|atomic|horde|racing\s*kings|king\s*of\s*the\s*hill|three.?check|3.?check/i;
   const TREE = ".tview2";
   const resultText = (s) => /^(?:1-0|0-1|1\/2-1\/2|½-½)$/.test(s?.trim() || "");
-  const tag = (pgn, name) => new RegExp('^\\s*\\[' + name + '\\s+"([^"]*)"\\s*\\]', "im").exec(pgn)?.[1];
+  const tag = AQ.tag;
+  const pgnText = () => [...document.querySelectorAll(".copyables textarea, .pgn textarea, textarea[name='pgn']")]
+    .map((node) => node.value).join("\n");
 
-  function scope(tree, pgn) {
+  function scope(tree, pgn, visible) {
     const path = location.pathname;
     const study = /^\/study\//.test(path);
     const round = ROUND.test(path) && !/^\/(?:analysis|training|broadcast)\/?$/.test(path);
@@ -23,7 +25,7 @@
       return { page, gate: "variant" };
     const running = document.querySelector(".rclock.running, .clock.running, .rclock-correspondence.running, .forecast");
     const result = [...document.querySelectorAll(".result-wrap .result, .game__meta .result, .round__app .result")]
-      .some((el) => resultText(el.textContent) && AQ.visible(el));
+      .some((el) => resultText(el.textContent) && visible(el));
     if (running || (round || gameAnalysis) && !result && !(tree && resultText(tag(pgn, "Result"))))
       return { page, gate: "in_progress" };
     if (tree && (study || /^\/analysis(?:\/|$)/.test(path) || round || gameAnalysis)) return { page, gate: null };
@@ -92,13 +94,13 @@
   AQ.adapters.push({
     name: "lichess",
     matches: () => location.hostname === "lichess.org" && AQ.hasBoard("cg-board"),
+    gate: () => scope(document.querySelector(TREE), pgnText(), AQ.shown).gate,
     read() {
       const el = AQ.mainBoard("cg-board", ".main-board, .round__app, .analyse__board");
       if (!el) return null;
       const tree = document.querySelector(TREE);
-      const pgn = [...document.querySelectorAll(".copyables textarea, .pgn textarea, textarea[name='pgn']")]
-        .map((node) => node.value).join("\n");
-      const context = scope(tree, pgn);
+      const pgn = pgnText();
+      const context = scope(tree, pgn, AQ.visible);
       const board = readBoard(el);
       const exactFen = [...document.querySelectorAll(".copyables input, input.copyable, .copyables [data-fen]")]
         .map((node) => (node.dataset.fen || node.value || "").trim()).find(C.parseFen);

@@ -11,6 +11,7 @@ to whom, and what it keeps.
 - Nothing leaves your browser until you click an ask button in the Ask Queen panel.
 - A click sends the chess position, its moves and a few generation settings to a QUEEN server. If you saved a Hugging
   Face token, the token is sent too.
+- If that server fails in a way that may be temporary, the same request is sent once to a backup server.
 - Those servers are run by third parties, who can see what is sent.
 - There are no analytics, no ads, no tracking, and nothing is sold.
 
@@ -30,7 +31,8 @@ Each request contains:
 | Your Hugging Face token | Only if you saved one in Settings. Sent as an `Authorization` header over HTTPS. |
 
 If the first server fails in a way that may be temporary (it can't be reached, is asleep, or times out), the same
-request is sent once to the backup server. That is the only request the extension makes without a click of its own.
+request is sent once to a backup server. That is the only request the extension makes without a click of its own. So
+one question can reach two servers, and each server that is tried receives the request whether or not it answers.
 
 The extension does not send your username, the game's link or ID, the page address, clocks, chat, cookies, or anything
 else from the page. Requests are made without cookies and without a referrer. As with any web request, the server also
@@ -38,13 +40,16 @@ sees your IP address and ordinary browser headers such as the user agent.
 
 ## Who receives it
 
-Requests go to one of two community-run Hugging Face Spaces that host the QUEEN model:
+Every request goes to a server on this list and nowhere else:
 
-- `https://boneyland-queen-pawn-8.hf.space` (default)
-- `https://hugging-apps-queen-pawn-8.hf.space` (backup)
+- `https://boneyland-queen-pawn-8.hf.space`, a community-run Hugging Face Space that hosts the QUEEN model. Tried
+  first unless you choose otherwise.
+- `https://hugging-apps-queen-pawn-8.hf.space`, a second community-run Space with the same model.
+- Your own custom Space at an `https://….hf.space` address, only if you set one up in Settings and approve that
+  address in Chrome.
 
-Or, if you set one up in Settings, to your own custom Space at an `https://….hf.space` address that you approve in
-Chrome.
+The server you chose in Settings is tried first. The backup for a failed attempt is the other built-in server, or the
+default one when your first choice is a custom server. **Try the other server** asks them in the opposite order.
 
 These servers are third parties. They are not operated by Chess.com, Lichess, Princeton NLP, Hugging Face or the
 author of this extension. The people who run a Space, and Hugging Face as its host, can see the contents and headers
@@ -52,8 +57,10 @@ of each request, including your token if you saved one. What they log or keep is
 see [Hugging Face's privacy policy](https://huggingface.co/privacy). For that reason, use a read-only token made just
 for Ask Queen, with no access to private models or data.
 
-Your token is sent to the two built-in servers. It is sent to a custom server only if you separately tick **Send my
-Hugging Face token to this server too** for that address. Without that, requests to the custom server carry no token.
+Your token is sent to a built-in server whenever that server is tried, as the first choice or as the backup. It is
+sent to a custom server only if you ticked the **Send my Hugging Face token to …** box for that exact address when
+you saved it. Without that, requests to the custom server carry no token. The choice belongs to one address: saving a
+different address clears it, and the token does not go to the new address until you tick the box again for it.
 
 The author of this extension receives nothing. The extension has no server of its own.
 
@@ -90,7 +97,8 @@ The extension shows nothing and sends nothing on games in progress, puzzles and 
 
 ## What the extension never does
 
-- It does not sell or share your data with anyone other than the QUEEN server that answers your request.
+- It does not sell your data, and it shares it with no one except the QUEEN servers a question is sent to: the
+  server tried first and, if that attempt fails, the backup.
 - It does not use or transfer your data for anything unrelated to its single purpose.
 - It does not use your data for advertising, profiling, or to determine creditworthiness or for lending.
 - It contains no analytics, no trackers and no remotely loaded code.

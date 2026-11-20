@@ -44,7 +44,7 @@ LIMITS, STATED PLAINLY
 • Off during games.
 
 PRIVACY
-Nothing is sent until you click. A click sends the position, its moves and, if you added one, your Hugging Face token to a community-run QUEEN server on Hugging Face. No username, game link, clock or chat. No analytics and no ads. The servers are third parties and are named in the extension and in the privacy policy.
+Nothing is sent until you click. A click sends the position, its moves and, if you added one, your Hugging Face token to a community-run QUEEN server on Hugging Face. If that server fails, the same request is sent once to a backup server. No username, game link, clock or chat. No analytics and no ads. The servers are third parties and are named in the extension and in the privacy policy.
 
 Unofficial. Not affiliated with or endorsed by Chess.com, Lichess, Princeton NLP or Hugging Face.
 ```
@@ -60,7 +60,7 @@ Shown in the description above, in Settings, in the README and in `LICENSE`:
 | Asset | File | Notes |
 |---|---|---|
 | Store icon, 128×128 | `icons/128.png` | A gold crown on a dark tile. No site or company marks. |
-| Small promo tile, 440×280 | `store/promo-440x280.png` | Drawn for this listing. No site logos. |
+| Small promo tile, 440×280 | `store/promo-440x280.png` | Rendered from the fixture page `store/promo-tile.html` by `node store/make-promo.js`. No site logos. Provenance: `store/promo.md`. |
 | Screenshots, 1280×800 | `docs/review/evidence/round-N/` | Made by the test run (`node test/run.js N`) from fixture pages with a mocked server. No site logos. Use the latest round. |
 
 Suggested screenshots, in this order (up to five):

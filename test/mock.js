@@ -15,10 +15,12 @@ const complete = (data) => "event: complete\r\ndata: " + JSON.stringify(data) + 
 const sseError = (message) => "event: error\r\ndata: " + JSON.stringify({ error: message }) + "\r\n\r\n";
 const heartbeat = "event: heartbeat\r\ndata: null\r\n\r\n";
 
-function payload(data, plan, api) {
+function payload(data, plan, api, auth = "") {
   const [root, moves] = data;
   const fen = (!moves ? root : F.REPLY_FENS.get(F.positionKey(root, moves)));
   if (!fen) throw new Error("Fixture has no matching answer FEN for " + JSON.stringify([root, moves]));
+  // The real boneyland recording answers its own position; everything else is built from the recorded schema.
+  if (api === "analyse_position" && fen === F.RECORDED_FEN && plan === "ok") return F.boneyland;
   const italian = fen === F.ITALIAN, beforeItalian = fen === F.NC6;
   const answer = {
     ...F.boneylandSuccess, fen, best_move_san: italian ? "Be7" : beforeItalian ? "Bb5" : null,
@@ -34,6 +36,12 @@ function payload(data, plan, api) {
   if (plan === "truncated") Object.assign(answer, F.truncated, { fen });
   if (plan === "mismatch") answer.fen = F.FEN_MISMATCH;
   if (plan === "xss") answer.analysis = F.XSS.join("\n\n");
+  if (plan === "echo") {
+    // A hostile server echoes the Authorization token, split by markup and Markdown so naive redaction misses it.
+    const t = auth.replace(/^Bearer /, "");
+    answer.analysis = `Your key is ${t.slice(0, 8)}<b></b>${t.slice(8)}. Also **${t.slice(0, 6)}**${t.slice(6)} and ${t}.`;
+    answer.evaluation = `White is better, says ${t.slice(0, 5)}<i>${t.slice(5)}</i>`;
+  }
   if (plan === "bad_response") answer.best_move_san = 5;
   if (api === "analyze") {
     const recorded = fen === F.ITALIAN && ["ok", "survival", "timeout-backup", "backup"].includes(plan);
@@ -64,7 +72,7 @@ async function createMock(dir) {
       if (!res.writableFinished) call.aborted = Date.now();
       for (const id of timers) clearTimeout(id);
     });
-    const send = (code, body, type = "text/plain") => { res.writeHead(code, { "Content-Type": type }); res.end(body); };
+    const send = (code, body, type = "text/plain", headers = {}) => { res.writeHead(code, { "Content-Type": type, ...headers }); res.end(body); };
     if (!serverName || !route || !["POST", "GET"].includes(req.method)) {
       errors.push("Unexpected request " + req.method + " " + req.headers.host + req.url);
       return send(404, "Mock route unavailable");
@@ -75,9 +83,9 @@ async function createMock(dir) {
       const parsed = JSON.parse(Buffer.concat(body).toString("utf8"));
       call.body = parsed;
       const primary = serverName === "boneyland";
-      if (plan === "quota") return send(429, "GPU quota exceeded");
+      if (plan === "quota" || (plan === "quota-token" && !call.auth)) return send(429, "GPU quota exceeded");
       if (plan === "token_rejected") return send(401, "Invalid token");
-      if (plan === "busy") return send(429, "Queue full");
+      if (plan === "busy") return send(429, "Queue full", "text/plain", { "Retry-After": "20" });
       if (plan === "unreachable") return send(404, "");
       if (plan === "asleep") return send(200, "<html>Space sleeping</html>", "text/html");
       if (plan === "all_unavailable" || (plan === "backup" && primary))
@@ -95,7 +103,7 @@ async function createMock(dir) {
     if (selected === "illegal_position") return res.end(sseError("Illegal move in supplied position"));
     if (selected === "game_over") return res.end(sseError("The game is already over"));
     if (["cancel", "timeout"].includes(selected) || selected === "timeout-backup" && serverName === "boneyland") return;
-    const answer = complete(payload(saved.data, selected, route[1]));
+    const answer = complete(payload(saved.data, selected, route[1], call.auth));
     if (selected === "survival") {
       for (let at = 1000; at < 90000; at += 10000) timers.push(setTimeout(() => res.write(heartbeat), at));
       timers.push(setTimeout(() => res.end(answer), 90000));

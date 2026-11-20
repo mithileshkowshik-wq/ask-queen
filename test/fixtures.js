@@ -62,7 +62,7 @@ function expand(fen) {
   });
   return map;
 }
-function board(site, fen, { flipped, highlights = [], extra = "", size = 480, exact } = {}) {
+function board(site, fen, { flipped, highlights = [], extra = "", size = 480, exact, animate } = {}) {
   const lichess = site === "lichess";
   const sqSize = size / 8;
   const square = (sq) => {
@@ -75,8 +75,8 @@ function board(site, fen, { flipped, highlights = [], extra = "", size = 480, ex
   const render = (tag, classes, sq, text, style = "") => `<${tag} class="${classes}${lichess ? "" : ` square-${"abcdefgh".indexOf(sq[0]) + 1}${sq[1]}`}" ${square(sq).slice(0, -1)};${style}">${text || ""}</${tag}>`;
   const pieces = Object.entries(expand(fen)).map(([sq, p]) => {
     const white = p === p.toUpperCase();
-    const classes = lichess ? `${white ? "white" : "black"} ${ROLE[p.toLowerCase()]}` :
-      `piece ${white ? "w" : "b"}${p.toLowerCase()}`;
+    const classes = (lichess ? `${white ? "white" : "black"} ${ROLE[p.toLowerCase()]}` :
+      `piece ${white ? "w" : "b"}${p.toLowerCase()}`) + (sq === animate ? " anim" : "");
     return render(lichess ? "piece" : "div", classes, sq, GLYPH[p]);
   });
   // chess.com draws last-move and user marks as .highlight squares that differ only by colour.
@@ -118,15 +118,18 @@ const css = `html{color-scheme:dark}body{margin:0;background:#201e1a;color:#eee;
   .site-controls{margin-top:12px}`;
 
 function fixture(id, { site = id.startsWith("lichess") ? "lichess" : "chess.com", url, fen, moves, selected,
-  expect, highlight = [], boardOptions = {}, extra = "", customTree, figurines = false } = {}) {
+  expect, highlight = [], boardOptions = {}, extra = "", customTree, figurines = false, finished = true } = {}) {
   const lichess = site === "lichess";
   const host = lichess ? "lichess.org" : "www.chess.com";
   const list = customTree ?? (moves ? (lichess ? tree(moves, selected) : review(moves, selected, figurines)) : lichess ? tree([], -1) : "");
   const main = fen ? `<main aria-label="Chessboard">${board(site, fen, { highlights: highlight, ...boardOptions })}
     <nav class="site-controls" aria-label="Move navigation"><button id="site-previous">Previous move</button><button>Next move</button></nav></main>` : "";
+  // chess.com game pages (Game Review included) open only with a result on screen, as the finished move list shows.
+  const result = !lichess && finished ? '<div class="game-result">1-0</div>' : "";
   const html = `<!doctype html><html lang="en" data-fixture="${id}"><meta charset="utf-8"><title>${id}</title><style>${css}</style>
-    <body>${main}${list}${extra}</body></html>`;
-  SITES[id] = { url: `https://${host}${url || (lichess ? "/analysis" : "/analysis/game/live/123456789/review")}`,
+    <script>window.siteEarlyKeys = 0; addEventListener("keydown", () => window.siteEarlyKeys++, true);</script>
+    <body>${main}${list}${result}${extra}</body></html>`;
+  SITES[id] = { url: `https://${host}${url || (lichess ? "/analysis" : "/analysis/game/live/123456789?tab=review")}`,
     html, expect, fen };
   if (expect?.replyFen) REPLY_FENS.set(positionKey(expect.fen, expect.moves), expect.replyFen);
 }
@@ -153,10 +156,9 @@ for (const site of ["lichess", "chesscom"]) {
     expect: current(NC6.replace("2 3", "0 1"), { sideSource: null, choose: "White" }) });
   add("mini", { fen: ITALIAN, moves: OPENING, selected: 4, expect: fromStart(OPENING, ITALIAN),
     extra: `<aside class="mini-board">${board(li ? site : "chess.com", START, { size: 112 })}</aside>` });
-  add("animation", { fen: E4, boardOptions: { extra: li
-    ? '<piece class="white queen anim" style="transform:translate(240px,240px)">♕</piece>'
-    : '<div class="piece wq square-54 anim">♕</div>' },
-    moves: OPENING, selected: 0, expect: fromStart(["e4"], E4) });
+  // The e4 pawn itself is still moving: the scan would miss it, so the board stays unreadable until it lands.
+  add("animation", { fen: E4, boardOptions: { animate: "e4" }, moves: OPENING, selected: 0,
+    expect: { unreadable: true, moving: true } });
   add("user-marked", { fen: E4, customTree: li ? '<div class="tview2"><move class="active"></move></div>' : "",
     highlight: li ? [["e2"], ["e4"], ["h8", "selected"]] : [["e2"], ["e4"], ["h8", "highlight", "rgb(235, 97, 80)"], ["a1", "highlight", "rgb(82, 176, 220)"]],
     expect: current(E4, { sideSource: "lastmove" }) });
@@ -169,10 +171,10 @@ for (const site of ["lichess", "chesscom"]) {
   add("returned-rook", { fen: ROOK_DANCE[1], moves: ROOK_DANCE[0], selected: 5, highlight: [["h6"], ["h8"]],
     extra: li ? `<div class="copyables"><input value="${ROOK_DANCE[1]}"></div>` : "",
     expect: fromStart(ROOK_DANCE[0], ROOK_DANCE[1]) });
-  add("in-progress", { url: li ? "/abcdefgh" : "/game/live/4815162342", fen: E4, customTree: "",
+  add("in-progress", { url: li ? "/abcdefgh" : "/game/live/4815162342", fen: E4, customTree: "", finished: false,
     extra: li ? '<rm6><l4x><i5z>1</i5z><kwdb class="a1t">e4</kwdb></l4x></rm6><div class="rclock rclock-bottom running">4:30</div>'
       : review(["e4"], 0) + '<div class="clock-component clock-player-turn">4:30</div>', expect: blocked("in_progress") });
-  add("daily", { url: li ? "/abcdefgh/white/analysis" : "/game/daily/4815162342", fen: E4, moves: ["e4"], selected: 0,
+  add("daily", { url: li ? "/abcdefgh/white/analysis" : "/game/daily/4815162342", fen: E4, moves: ["e4"], selected: 0, finished: false,
     expect: blocked("in_progress") });
   add("puzzle", { url: li ? "/training/abcde" : "/puzzles/rated", fen: E4, expect: blocked("puzzle") });
   add("960", { url: li ? "/analysis/chess960" : "/variants/chess960", fen: START, expect: blocked("variant") });
@@ -219,7 +221,7 @@ fixture("lichess-fen-mismatch", { fen: ITALIAN, moves: OPENING, selected: 4, ext
   highlight: [["f1"], ["c4"]], expect: current(ITALIAN.replace("3 3", "0 1"), { disagree: true, sideSource: "lastmove" }) });
 fixture("lichess-streak", { url: "/streak", fen: START, expect: blocked("puzzle") });
 fixture("chesscom-analysis", { url: "/analysis", fen: ITALIAN, moves: OPENING, selected: 4, expect: fromStart(OPENING, ITALIAN) });
-fixture("chesscom-finished", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1,
+fixture("chesscom-finished", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1, finished: false,
   extra: '<div class="game-result">1–0</div>', expect: fromStart(["e4", "e5"], E5) });
 fixture("chesscom-variation", { fen: VARIATION,
   customTree: `<div class="move-list"><div class="node" data-node="0-0">e4</div><div class="node" data-node="0-1">e5</div>
@@ -235,8 +237,50 @@ fixture("chesscom-localized", { fen: NC6, moves: ["e4", "e5", "Sf3", "Nc6"], sel
   highlight: [["b8"], ["c6"]], expect: current(NC6.replace("2 3", "0 1"), { sideSource: "lastmove" }) });
 fixture("chesscom-text-figurines", { url: "/analysis", fen: ITALIAN, highlight: [["f1"], ["c4"]],
   customTree: review(["e4", "e5", "♘f3", "♞c6", "♗c4"], 4), expect: fromStart(OPENING, ITALIAN) });
-fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1,
+fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1, finished: false,
   extra: '<div hidden class="game-result">1–0</div>', expect: blocked("in_progress") });
+// A game still being played, reached through Game Review or analysis links: hints never open the gate (§2).
+// One of them also shows a "Draw offered" note, which is not a result.
+const LIVE = review(OPENING.slice(0, 2), 1) + '<div class="clock-component clock-player-turn">4:30</div>';
+for (const [id, url] of [["live-tab-review", "/game/live/4815162342?tab=review"], ["daily-tab-review", "/game/daily/4815162342?tab=review"],
+  ["live-review", "/game/live/4815162342/review"], ["analysis-daily", "/analysis/game/daily/4815162342"],
+  ["analysis-live", "/analysis/game/live/4815162342"]]) {
+  fixture("chesscom-" + id, { url, fen: E5, customTree: LIVE, finished: false, highlight: [["e7"], ["e5"]],
+    extra: id === "live-review" ? '<div class="board-layout-sidebar"><div class="result">Draw offered</div></div>' : "",
+    expect: blocked("in_progress") });
+}
+// A custom root and the moves before the selected one (lichess [FEN] tag; chess.com share-panel PGN).
+const AFTER_OOO = BLACK_CASTLE[1], AFTER_KE2 = "2kr3r/8/8/8/8/8/4K3/8 b - - 9 15";
+fixture("lichess-custom-line", { fen: AFTER_KE2, moves: ["O-O-O", "Ke2"], selected: 1, highlight: [["e1"], ["e2"]],
+  extra: pgn(BLACK_CASTLE[0], "14... O-O-O 15. Ke2"), expect: send(BLACK_CASTLE[0], "O-O-O", AFTER_OOO, { explain: "15.Ke2" }) });
+fixture("chesscom-tagged-root", { fen: AFTER_KE2, moves: ["O-O-O", "Ke2"], selected: 1, highlight: [["e1"], ["e2"]],
+  extra: `<textarea class="share-menu-tab-pgn-textarea">[SetUp "1"]\n[FEN "${BLACK_CASTLE[0]}"]\n\n14... O-O-O 15. Ke2</textarea>`,
+  expect: send(BLACK_CASTLE[0], "O-O-O", AFTER_OOO, { explain: "15.Ke2" }) });
+// chess.com numbers rows with data-whole-move-number; a first row other than 1 is a custom start with no root.
+fixture("chesscom-row-number", { fen: WHITE_CASTLE[1], highlight: [["e1"], ["g1"]],
+  customTree: '<wc-simple-move-list><div class="main-line-row" data-whole-move-number="14"><div class="node white-move" data-node="0-0">' +
+    '<span class="node-highlight-content selected">O-O</span></div></div></wc-simple-move-list>',
+  expect: current("4k3/8/8/8/8/8/8/R4RK1 b - - 0 1", { sideSource: "lastmove" }) });
+// The page's exact FEN says only Black keeps queenside castling, but the move line implies White does too.
+const RIGHTS_EXACT = ROOK_DANCE[1].replace(" Qq ", " q ");
+fixture("lichess-rights-mismatch", { fen: ROOK_DANCE[1], moves: ROOK_DANCE[0], selected: 5, highlight: [["h6"], ["h8"]],
+  extra: `<div class="copyables"><input value="${RIGHTS_EXACT}"></div>`,
+  expect: fromStart(ROOK_DANCE[0], ROOK_DANCE[1], { mismatch: true, exact: RIGHTS_EXACT }) });
+// Sibling lines 2.Nf3 and 2.Bc4, each selected in turn (the repeat-click test switches between them mid-ask).
+const AFTER_E5 = E5;
+for (const [id, fen, active, label] of [
+  ["nf3", "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2", "aabbcc", "2.Nf3"],
+  ["bc4", "rnbqkbnr/pppp1ppp/8/4p3/2B1P3/8/PPPP1PPP/RNBQK1NR b KQkq - 1 2", "aabbdd", "2.Bc4"]]) {
+  const move = (p, san) => `<move p="${p}"${p === active ? ' class="active"' : ""}><san>${san}</san></move>`;
+  fixture("lichess-sibling-" + id, { fen, highlight: id === "nf3" ? [["g1"], ["f3"]] : [["f1"], ["c4"]],
+    customTree: `<div class="tview2">${move("aa", "e4")}${move("aabb", "e5")}${move("aabbcc", "Nf3")}<lines><line>${move("aabbdd", "Bc4")}</line></lines></div>`,
+    expect: send(START, "e4 e5", AFTER_E5, { explain: label }) });
+}
+// The real boneyland recording answers this position (Best move for White after 3...Nd4).
+const RECORDED_MOVES = ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nd4"];
+const RECORDED_FEN = "r1bqkbnr/pppp1ppp/8/4p3/2BnP3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4";
+fixture("lichess-recorded", { fen: RECORDED_FEN, moves: RECORDED_MOVES, selected: 5, highlight: [["c6"], ["d4"]],
+  expect: fromStart(RECORDED_MOVES, RECORDED_FEN) });
 
 function sse(name) {
   return fs.readFileSync(path.join(__dirname, "fixtures", name), "utf8");
@@ -244,6 +288,7 @@ function sse(name) {
 const completeData = (text) => JSON.parse(text.split("\n").find((line) => line.startsWith("data: [")).slice(6));
 const hugging = completeData(sse("hugging-apps-success.sse"));
 const truncated = completeData(sse("boneyland-truncated.sse"))[0];
+const boneyland = completeData(sse("boneyland-success.sse"));
 // A synthetic boneyland success uses the recorded schema and the verified move from the other recording.
 const boneylandSuccess = { ...truncated, best_move_san: "Be7", best_move_uci: "f8e7",
   move_source: "best_move", critical_line_uci: ["f8e7", "e1g1"], critical_line_san: "3...Be7 4.O-O",
@@ -257,4 +302,5 @@ const XSS = [
 ];
 
 module.exports = { SITES, REPLY_FENS, positionKey, START, E4, E5, NC6, ITALIAN, OPENING, MATE, FEN_MISMATCH,
-  WHITE_CASTLE, BLACK_CASTLE, EN_PASSANT, PROMOTION, UNDERPROMOTION, expand, sse, hugging, truncated, boneylandSuccess, XSS };
+  WHITE_CASTLE, BLACK_CASTLE, EN_PASSANT, PROMOTION, UNDERPROMOTION, RECORDED_FEN, RECORDED_MOVES, expand, sse, hugging,
+  truncated, boneyland, boneylandSuccess, XSS };

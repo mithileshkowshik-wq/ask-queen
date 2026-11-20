@@ -23,10 +23,13 @@ const CODES = {
 };
 const failure = (code) => Object.assign(new Error(CODES[code]), { code });
 
-function classify(status, detail = "") {
+// A 401/403 only means our token was refused when we sent one; otherwise the Space itself is unusable (transient).
+function classify(status, detail = "", sentToken = false) {
   if (/quota|zero.?gpu.*(?:exhaust|limit)/i.test(detail)) return "quota";
-  if (status === 401 || status === 403 || /(?:invalid|reject|missing|expired).{0,25}(?:token|credential)|unauthori[sz]ed/i.test(detail))
+  const refused = status === 401 || status === 403;
+  if (sentToken && (refused || /(?:invalid|reject|missing|expired).{0,25}(?:token|credential)|unauthori[sz]ed/i.test(detail)))
     return "token_rejected";
+  if (refused) return "unreachable";
   if (/game (?:is (?:already )?)?over|no legal moves|checkmate|stalemate/i.test(detail)) return "game_over";
   if (/illegal (?:position|move|san|fen)|invalid (?:position|move|san|fen)|could not (?:parse|apply).*move/i.test(detail))
     return "illegal_position";
@@ -67,17 +70,33 @@ function createSseParser() {
   return { push: split, finish: () => split(new Uint8Array(), true) };
 }
 
-function plainAnalysis(text, side, token) {
+// Provider prose to plain text: drop well-formed markup (a lone "a<b" stays), the model's section labels and the
+// structured lines shown elsewhere, write "4. Nxe5" as "4.Nxe5" mid-sentence, and name the sides.
+function plainAnalysis(text, side) {
   const player = side === "w" ? "White" : "Black";
   const opponent = side === "w" ? "Black" : "White";
-  if (token) text = text.replaceAll(token, "");
   return text
-    .replace(/\bhf_[A-Za-z0-9_-]+\b/g, "")
     .replace(/<(svg|script|style|iframe)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, "")
-    .replace(/<!--[^]*?(?:-->|$)|<\/?[a-z][^>]*(?:>|$)/gi, "")
+    .replace(/<!--[\s\S]*?-->|<\/?[a-z][^<>]*>/gi, "")
     .replace(/^\s*ANALYSIS:\s*/i, "")
+    .replace(/^(?:BEST_MOVE|CRITICAL_LINE|PROMISING_MOVES|EVALUATION):.*$/gm, "")
+    .replace(/(\S[ \t]+|\()(\d+\.(?:\.\.)?)[ \t]+(?=(?:O-O|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8])\b)/g, "$1$2")
     .replace(/\bthe (player|opponent)\b/gi, (_, role) => role.toLowerCase() === "player" ? player : opponent)
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+// The last step before anything reaches a content script: remove the saved token and anything token-shaped from
+// every string, also when Markdown marks (*, _, `, ~) are wedged between its characters.
+const GAP = "[*_`~]*";
+function scrub(value, token) {
+  if (typeof value === "string") {
+    if (token) value = value.replace(new RegExp(token.split("").join(GAP), "g"), "[token removed]");
+    return value.replace(new RegExp(`h${GAP}f${GAP}_(?:${GAP}[A-Za-z0-9]){8,}`, "g"), "[token removed]");
+  }
+  if (Array.isArray(value)) return value.map((v) => scrub(v, token));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrub(v, token)]));
+  return value;
 }
 
 function proseMove(text) {
@@ -94,10 +113,14 @@ function normalized(out, api, req, server, seconds, token) {
   const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
     out[3] && typeof out[3] === "object" && { ...out[3], analysis: out[2] });
   const pos = chess.parseFen(raw?.fen);
+  const ev = raw?.evaluation;
   if (!raw || typeof raw.analysis !== "string" || !pos ||
-      (raw.best_move_san !== null && typeof raw.best_move_san !== "string")) throw failure("bad_response");
-  const analysis = plainAnalysis(raw.analysis, pos.side, token);
-  const lineUci = raw.critical_line_uci?.[0] ?? raw.critical_line?.legal_steps?.[0]?.uci;
+      (raw.best_move_san !== null && typeof raw.best_move_san !== "string") ||
+      !(ev == null || typeof ev === "string" || Number.isFinite(ev))) throw failure("bad_response");
+  const analysis = plainAnalysis(raw.analysis, pos.side);
+  // Only this provider's own legality-checked step may confirm a prose move (§4.5).
+  const lineUci = api === "boneyland" ? (Array.isArray(raw.critical_line_uci) ? raw.critical_line_uci[0] : undefined)
+    : raw.critical_line && typeof raw.critical_line === "object" ? raw.critical_line.legal_steps?.[0]?.uci : undefined;
   const moveSource = typeof raw.move_source === "string" && /^[a-z_]{1,40}$/.test(raw.move_source) ? raw.move_source : "";
   const prose = proseMove(analysis);
   let best = null, suggestion = null;
@@ -108,10 +131,13 @@ function normalized(out, api, req, server, seconds, token) {
     best = { san: prose, uci: lineUci, source: "prose_verified" };
   } else if (prose) suggestion = { san: prose, source: "prose_unverified" };
 
-  const evaluation = Number.isFinite(raw.evaluation) ? raw.evaluation : null;
+  // boneyland sends the model's own EVALUATION sentence, which names the side. A bare number (no recording has
+  // one) is read as relative to the side to move, as the model's player/opponent framing is.
+  const evaluation = Number.isFinite(ev) ? ev : null;
   const advantaged = (evaluation >= 0) === (pos.side === "w") ? "White" : "Black";
   const value = (advantaged === "White" ? 1 : -1) * Math.abs(evaluation);
-  const evaluationText = evaluation === null ? null : evaluation === 0 ? "White and Black are even (≈ 0)" :
+  const evaluationText = typeof ev === "string" ? plainAnalysis(ev, pos.side) || null :
+    evaluation === null ? null : evaluation === 0 ? "White and Black are even (≈ 0)" :
     `${advantaged} is ${Math.abs(value) < 1 ? "slightly better" : "better"} (≈ ${value < 0 ? "−" : "+"}${Math.abs(value)})`;
   const suppliedLine = Array.isArray(raw.critical_line_san) ? raw.critical_line_san.join(" ") : raw.critical_line_san;
   const line = typeof suppliedLine === "string"
@@ -119,10 +145,13 @@ function normalized(out, api, req, server, seconds, token) {
     : Array.isArray(raw.critical_line?.legal_steps) ? raw.critical_line.legal_steps.map((step) => step?.san) : [];
   const criticalLine = line.length && line.every(chess.isStrictSan)
     ? line.map((san, i) => i && (i + (pos.side === "b")) % 2 ? san : chess.moveLabel(san, raw.fen, i)).join(" ") : null;
+  // With an exact site FEN the snapshot also carries its rights: a move line must not widen them.
+  const { castle } = req.snapshot;
   const positionOk = req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
-    pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played);
-  return { server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
-    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" };
+    pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played) &&
+    (castle === undefined || [...castle.replace("-", "")].every((right) => pos.castle.includes(right)));
+  return scrub({ server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
+    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" }, token);
 }
 
 const ALLOWED_KEYS = new Set(["type", "mode", "fen", "moves", "played", "snapshot", "fresh", "prefer"]);
@@ -134,8 +163,11 @@ function validAsk(req) {
   if (req.mode === "best" ? req.played !== null : !chess.isStrictSan(req.played) || req.played.length > 20) return false;
   const root = chess.parseFen(req.fen);
   const snapshot = req.snapshot;
+  const rights = snapshot && "castle" in snapshot;
   if (!root || !["w", "b"].includes(snapshot?.side) || typeof snapshot.placement !== "string" ||
-      snapshot.placement.length > 80 || Object.keys(snapshot).length !== 2) return false;
+      snapshot.placement.length > 80 || Object.keys(snapshot).length !== (rights ? 4 : 2) ||
+      (rights && !(/^(?:-|K?Q?k?q?)$/.test(snapshot.castle) && snapshot.castle && /^(?:-|[a-h][36])$/.test(snapshot.ep))))
+    return false;
   const placement = chess.parseFen(snapshot.placement + " w - - 0 1")?.placement;
   if (!chess.isPlausibleBoard(root.placement).ok || !chess.isPlausibleBoard(placement).ok) return false;
   const moves = req.moves ? req.moves.split(" ") : [];
@@ -164,9 +196,19 @@ async function getServers(req, lastServer, tokenState) {
   });
 }
 
-async function requireResponse(res) {
+// Retry-After is delta seconds or an HTTP date; it is passed on so the panel can say when to try again.
+function retryAfter(value) {
+  const s = /^\s*\d+\s*$/.test(value || "") ? +value : Math.ceil((Date.parse(value) - Date.now()) / 1000);
+  return s > 0 && s <= 86400 ? s : undefined;
+}
+
+async function requireResponse(res, sentToken) {
   const html = /(?:text\/html|application\/xhtml)/i.test(res.headers.get("content-type") || "");
-  if (!res.ok) throw failure(classify(res.status, await res.text()));
+  if (!res.ok) {
+    const err = failure(classify(res.status, await res.text(), sentToken));
+    if (res.status === 429 || res.status === 503) err.retryAfter = retryAfter(res.headers.get("retry-after"));
+    throw err;
+  }
   if (html) throw failure("asleep");
 }
 
@@ -190,7 +232,7 @@ async function callSpace(space, req, seed, onWaiting, signal) {
   try {
     arm(20000);
     const start = await fetch(url, { ...init, method: "POST", body: JSON.stringify({ data }) });
-    await requireResponse(start);
+    await requireResponse(start, !!space.token);
     const text = await start.text();
     if (/^\s*<(?:!doctype\s+html|html\b)/i.test(text)) throw failure("asleep");
     let id;
@@ -199,7 +241,7 @@ async function callSpace(space, req, seed, onWaiting, signal) {
     onWaiting();
     arm(45000);
     const res = await fetch(url + "/" + id, init);
-    await requireResponse(res);
+    await requireResponse(res, !!space.token);
     if (!res.body) throw failure("unreachable");
     const reader = res.body.getReader();
     const parser = createSseParser();
@@ -207,7 +249,7 @@ async function callSpace(space, req, seed, onWaiting, signal) {
       const { value, done } = await reader.read();
       if (value?.byteLength) arm(45000);
       for (const record of done ? parser.finish() : parser.push(value)) {
-        if (record.event === "error") throw failure(classify(0, record.data));
+        if (record.event === "error") throw failure(classify(0, record.data, !!space.token));
         if (record.event === "complete") {
           try { return JSON.parse(record.data); } catch { throw failure("bad_response"); }
         }
@@ -269,7 +311,9 @@ function startExtension() {
     try {
       await protectedStorage;
       const version = settingsVersion;
-      const servers = await getServers(req, last, await chrome.storage.local.get(["primary", "custom", "token", "tokenFor"]));
+      const settings = await chrome.storage.local.get(["primary", "custom", "token", "tokenFor"]);
+      const saved = /^hf_[A-Za-z0-9]+$/.test(settings.token) ? settings.token : null;
+      const servers = await getServers(req, last, settings);
       job.server = servers[0].name;
       signal.throwIfAborted();
       const key = JSON.stringify([job.key, servers.map(({ name, base, api }) => [name, base, api]), version]);
@@ -301,7 +345,7 @@ function startExtension() {
         try {
           const out = await callSpace(space, req, seed, () => { if (!i) report(job, "waiting"); }, signal);
           signal.throwIfAborted();
-          const result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, space.token);
+          const result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, saved);
           if (!req.fresh && result.positionCheck === "ok" && version === settingsVersion) {
             cache.set(key, { result, time: Date.now() });
             if (cache.size > 32) cache.delete(cache.keys().next().value);
@@ -310,14 +354,15 @@ function startExtension() {
           return;
         } catch (err) {
           signal.throwIfAborted();
-          if (i) throw failure(fallbackError(firstError, err.code));
+          if (i) throw fallbackError(firstError, err.code) === err.code ? err : failure(fallbackError(firstError, err.code));
           if (!TRANSIENT.has(err.code)) throw err;
           firstError = err.code;
         }
       }
     } catch (err) {
       const code = Object.hasOwn(CODES, err?.code) ? err.code : "bad_response";
-      for (const client of job.clients) send(client, { error: { code, detail: CODES[code] } });
+      const retry = err?.code === code && err.retryAfter ? { retryAfter: err.retryAfter } : {};
+      for (const client of job.clients) send(client, { error: { code, detail: CODES[code], ...retry } });
     } finally {
       clearTimeout(overall);
       clearInterval(keepalive);
@@ -350,7 +395,7 @@ function startExtension() {
           job = active;
           job.clients.add(client);
           if (job.status) send(client, job.status);
-        } else send(client, { error: { code: "busy", detail: CODES.busy } });
+        } else send(client, { error: { code: "busy", detail: "Another tab is already asking Queen.", reason: "other_tab" } });
         return;
       }
       job = active = { req, key, last, ctrl: new AbortController(), clients: new Set([client]), server: "boneyland" };
@@ -380,4 +425,4 @@ function startExtension() {
 
 if (typeof chrome !== "undefined" && chrome.runtime) startExtension();
 if (typeof module !== "undefined") module.exports = { createSseParser, classify, fallbackError, normalized, proseMove,
-  plainAnalysis, validAsk, customOrigin, callSpace, CODES };
+  plainAnalysis, scrub, retryAfter, validAsk, customOrigin, callSpace, CODES };

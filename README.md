@@ -91,6 +91,7 @@ The full policy is in [PRIVACY.md](PRIVACY.md). In short:
 - **Nothing is sent until you click** an ask button. No background calls, no analytics, no ads.
 - **Each click sends** the position (FEN), the moves (SAN) and the generation settings to a QUEEN server. If you saved
   a Hugging Face token, it is sent too. Nothing else: no username, game link, clock or chat.
+- **A failed attempt is retried once** on a backup server, which then receives the same request.
 - **The servers are third parties.** They are community-run Hugging Face Spaces, `boneyland/queen-pawn-8` and
   `hugging-apps/queen-pawn-8`. They are not run by Chess.com, Lichess, Princeton, Hugging Face or this project, and
   the people who run them can see what is sent.
@@ -131,12 +132,13 @@ What to know about the token:
 | **Can't reach Queen's server** | The connection failed. | Check your connection, then **Try again**. |
 | **Queen's server is waking up** | Free servers sleep when idle. | Wait a minute or two, then **Try again**. |
 | **Queen took too long** | No answer within the time limit. | **Try again**, ideally at a quieter time. |
-| **Queen's servers are busy** | Too many questions are queued, or another tab is already asking. | Wait a minute, then **Try again**. |
+| **Queen's servers are busy** | Too many questions are queued. | Wait, then **Try again**. If the server says how long, the button counts down. |
+| **Another tab is already asking Queen** | Queen answers one question at a time per browser. | Wait for that answer, then **Try again**. |
 | **Both servers are unavailable** | Neither free server answered. | Try later, or set up a custom server. |
 | **Queen can't use this position** | The server rejected the moves or the position. | Click **Work from the pieces**, or check the side to move. |
 | **The game is over here** | The position is checkmate or stalemate. | Pick an earlier move. |
 | **The server's format changed** | The reply wasn't in a shape the extension understands. | Update Ask Queen, or click **Try the other server**. |
-| **The question was stopped** | The request ended before an answer came. | Click **Ask again**. |
+| **The question was stopped** | The request ended before an answer came. | Click **Try again**. |
 | **Ask Queen was updated** | The extension was updated or reloaded while the page was open. | Click **Reload this page**. |
 
 Every error has a collapsed **Details** line with the technical reason.
@@ -151,7 +153,8 @@ If you run your own copy of a QUEEN Space on Hugging Face, Ask Queen can use it.
 3. Click **Save custom server**. Chrome asks you to allow that one address, and nothing else.
 4. Under **Server**, choose **Your custom server** to ask it first.
 
-Your token is **not** sent to a custom server unless you tick **Send my Hugging Face token to this server too**.
+Your token is **not** sent to a custom server unless you tick the **Send my Hugging Face token to …** box for that
+address. The choice covers that one address: change the address and you have to tick it again.
 **Remove custom server** forgets it and gives back Chrome's access to it.
 
 ## Test and package
@@ -195,7 +198,7 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 - **Answers can be wrong**, cut off, or missing a clear move. The panel labels each case.
 - **Standard chess only**, and never during a game.
 - **Working from the pieces is less exact.** Castling rights are guessed from where the kings and rooks stand, and the
-  move counters are reset.
+  move counters are reset, so Queen's move is numbered as move 1.
 - **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise Queen works
   from the pieces.
 - **Site changes can break reading.** Both sites change their pages without notice. The extension checks the move list

@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- Source of store/promo-440x280.png. Render it with: node store/make-promo.js (see store/promo.md).
+     Everything here is drawn with CSS and system fonts: no images, no site logos, no third-party marks. -->
+<html lang="en"><meta charset="utf-8"><title>Ask Queen promo tile</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { width: 440px; height: 280px; overflow: hidden; background: #19141f; color: #ede6d6; font: 14px/1.4 system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  .tile { position: relative; width: 440px; height: 280px; padding: 30px 30px; background: radial-gradient(120% 90% at 100% 0%, #33273f 0%, #19141f 62%); }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .crown { color: #d9b45f; font: 46px/1 "Apple Symbols", "Segoe UI Symbol", sans-serif; }
+  h1 { font: 500 40px/1 ui-serif, "Iowan Old Style", Palatino, Georgia, serif; letter-spacing: -.3px; }
+  .tag { margin-top: 12px; max-width: 250px; color: #c9c0d2; font-size: 16px; line-height: 1.35; }
+  .card { position: absolute; left: 30px; right: 30px; bottom: 28px; padding: 14px 16px; border: 1px solid #857a96; border-radius: 12px; background: #251e2e; box-shadow: 0 14px 34px rgba(8,4,12,.55); }
+  .ctx { color: #a9a0b4; font-size: 12px; }
+  .ctx i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border: 1.5px solid #ede6d6; border-radius: 50%; }
+  .head { margin-top: 3px; font: 500 20px/1.25 ui-serif, "Iowan Old Style", Palatino, Georgia, serif; }
+  .head b { color: #d9b45f; font-weight: 500; }
+  .sq { position: absolute; right: 26px; top: 28px; display: grid; grid-template-columns: repeat(4, 22px); gap: 0; border-radius: 6px; overflow: hidden; opacity: .9; }
+  .sq i { width: 22px; height: 22px; background: #3b3148; }
+  .sq i.l { background: #5b4d6e; }
+  .sq i.g { background: #d9b45f; }
+</style>
+<div class="tile">
+  <div class="brand"><span class="crown">♛&#xFE0E;</span><h1>Ask Queen</h1></div>
+  <p class="tag">Why that move? Ask the QUEEN chess model after your game.</p>
+  <div class="sq"><i class="l"></i><i></i><i class="l"></i><i></i><i></i><i class="l"></i><i class="g"></i><i class="l"></i><i class="l"></i><i></i><i class="l"></i><i></i><i></i><i class="l"></i><i></i><i class="l"></i></div>
+  <div class="card">
+    <p class="ctx"><i></i>Position before 14...Nf6, Black to move</p>
+    <p class="head">14...Nf6 was played. Queen prefers <b>14...Bd7</b>.</p>
+  </div>
+</div>

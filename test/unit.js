@@ -38,7 +38,12 @@ function assertFixture(doc, id) {
   assert.equal(typeof pos.snapshotKey, "string");
   assert.equal(w.AQ.readPosition().snapshotKey, pos.snapshotKey);
   if (e.gate) { assert.equal(pos.moves, null); return; }
-  if (e.unreadable) { assert.equal(pos.board.valid, false); assert.notEqual(pos.root?.verified, true); return; }
+  if (e.unreadable) {
+    assert.equal(pos.board.valid, false);
+    assert.notEqual(pos.root?.verified, true);
+    if (e.moving) assert.equal(pos.board.reason, "The board is moving");
+    return;
+  }
   if (e.mate) { assert.match(pos.moves.at(-1), /#$/); return; }
   assert.equal(pos.board.placement, f.fen.split(" ")[0]);
   assert.equal(pos.board.valid, true);
@@ -46,7 +51,8 @@ function assertFixture(doc, id) {
     assert.equal(pos.crossCheck.ok, false);
     assert.equal(pos.moves, null);
     assert.notEqual(pos.root?.verified, true);
-  }
+  } else assert.equal(pos.crossCheck.ok, true, pos.crossCheck.reason);
+  if (e.exact) assert.equal(pos.board.fen6, e.exact);
   if (Object.hasOwn(e, "sideSource")) {
     assert.equal(pos.board.sideSource, e.sideSource);
     assert.equal(pos.moves, null);
@@ -149,6 +155,76 @@ function runUnits(test) {
       try { assertFixture(doc, id); } finally { doc.close(); }
     });
   }
+  test("AQ.gate() is layout-free and agrees with readPosition() on every fixture", () => {
+    for (const id of Object.keys(F.SITES)) {
+      const doc = fixtureDoc(id);
+      try {
+        const { w } = doc, full = w.AQ.readPosition();
+        const layout = () => { throw new Error("layout read in AQ.gate()"); };
+        w.Element.prototype.getBoundingClientRect = w.Element.prototype.getClientRects = layout;
+        w.getComputedStyle = layout;
+        const cheap = w.AQ.gate();
+        assert.equal(cheap.hasBoard, !!full, id);
+        assert.equal(cheap.gate, full ? full.gate : null, id);
+      } finally { doc.close(); }
+    }
+  });
+  test("A moving piece keeps the board unreadable until it lands", () => {
+    for (const id of ["lichess-animation", "chesscom-animation"]) {
+      const doc = fixtureDoc(id);
+      try {
+        const { AQ, document } = doc.w;
+        assert.equal(AQ.readPosition().board.reason, "The board is moving");
+        document.querySelector(".anim").classList.remove("anim");
+        const pos = AQ.readPosition();
+        assert.equal(pos.board.valid, true);
+        assert.equal(pos.moves.join(" "), "e4");
+      } finally { doc.close(); }
+    }
+  });
+  test("With exact rights in the snapshot, Best needs equal rights and Explain may only lose rights", () => {
+    const [placement, side] = F.ITALIAN.split(" ");
+    assert(C.verifyBest(F.ITALIAN, { placement, side, castle: "KQkq", ep: "-" }));
+    assert.equal(C.verifyBest(F.ITALIAN, { placement, side, castle: "kq", ep: "-" }), false);
+    assert.equal(C.verifyBest(F.ITALIAN, { placement, side, castle: "KQkq", ep: "e3" }), false);
+    const explain = (castle) => bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6 }], "boneyland",
+      { mode: "explain", played: "Bc4", snapshot: { placement, side, castle, ep: "-" } }, "boneyland", 1).positionCheck;
+    assert.equal(explain("KQkq"), "ok");
+    assert.equal(explain("kq"), "ok");
+    const narrow = bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6.replace("KQkq", "Kkq") }], "boneyland",
+      { mode: "explain", played: "Bc4", snapshot: { placement, side, castle: "KQkq", ep: "-" } }, "boneyland", 1);
+    assert.equal(narrow.positionCheck, "mismatch");
+    const ask = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    assert(bg.validAsk({ ...ask, snapshot: { ...ask.snapshot, castle: "KQkq", ep: "-" } }));
+    for (const bad of [{ castle: "KQkq" }, { castle: "", ep: "-" }, { castle: "QK", ep: "-" }, { castle: "-", ep: "e4" }])
+      assert.equal(bg.validAsk({ ...ask, snapshot: { ...ask.snapshot, ...bad } }), false, JSON.stringify(bad));
+  });
+  test("Prose is confirmed only by the answering provider's own legality field", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const prose = { ...F.truncated, move_source: "random_legal_fallback" };
+    // boneyland shape carrying a hugging-apps style legal step: not boneyland's field, so unverified.
+    const bony = bg.normalized([{ ...prose, critical_line_uci: [], critical_line: { legal_steps: [{ uci: "f8e7" }] } }],
+      "boneyland", req, "boneyland", 1);
+    assert.equal(bony.best, null);
+    assert.equal(bony.suggestion.san, "Be7");
+    // hugging-apps shape carrying boneyland's critical_line_uci: foreign, so unverified.
+    const hug = (extra) => bg.normalized(["<svg/>", null, prose.analysis, { ...prose, ...extra }], "hugging-apps", req, "hugging-apps", 1);
+    assert.equal(hug({ critical_line_uci: ["f8e7"] }).best, null);
+    assert.equal(hug({ critical_line: "{'legal_steps': [{'uci': 'f8e7'}]}" }).best, null, "a repr string is not a legality field");
+    assert.deepEqual(hug({ critical_line: { legal_steps: [{ uci: "f8e7" }] } }).best, { san: "Be7", uci: "f8e7", source: "prose_verified" });
+  });
+  test("The real boneyland recording normalizes with its evaluation sentence and a numbered line", () => {
+    const req = makeRequest("best", F.START, F.RECORDED_MOVES.join(" "), { position: F.RECORDED_FEN });
+    const r = bg.normalized(F.boneyland, "boneyland", req, "boneyland", 16);
+    assert.deepEqual(r.best, { san: "Nxe5", uci: "f3e5", source: "structured" });
+    assert.equal(r.evaluation, null);
+    assert.equal(r.evaluationText, "White is better by approximately 1.51 pawns, retaining the extra pawn and a modest space advantage after the best play.");
+    assert.equal(r.criticalLine, "4.Nxe5 Qf6 5.O-O Ne6 6.d4 d6");
+    assert.equal(r.positionCheck, "ok");
+    assert.match(r.analysis, /The best move is 4\.Nxe5,/);
+    assert.doesNotMatch(r.analysis, /BEST_MOVE|CRITICAL_LINE|EVALUATION:/);
+    assert.throws(() => bg.normalized([{ ...F.boneyland[0], evaluation: {} }], "boneyland", req, "boneyland", 1), { code: "bad_response" });
+  });
   test("SSE parser handles arbitrary byte splits, CRLF, Unicode, multi-line data and no complete", () => {
     const input = Buffer.from(": ping\r\nevent: heartbeat\r\ndata: null\r\n\r\n" +
       "event: complete\r\ndata: [\r\ndata: \"é\"]\r\n\r\n");
@@ -193,23 +269,42 @@ function runUnits(test) {
     for (const raw of [[], [{}], [{ ...F.boneylandSuccess, best_move_san: 1 }], [{ ...F.boneylandSuccess, analysis: {} }]])
       assert.throws(() => bg.normalized(raw, "boneyland", req, "boneyland", 1), { code: "bad_response" });
   });
-  test("Provider text drops HTML, SVG, model tokens and known token material", () => {
-    const clean = bg.plainAnalysis(F.XSS.join("\n") + "\nhf_exampleToken42 secret-test-token", "b", "secret-test-token");
-    assert.doesNotMatch(clean, /<(?:svg|img|script|PIECE|SQUARE|b>)|DROP_SVG|hf_example|secret-test-token/i);
+  test("Provider text drops well-formed HTML, SVG and model tokens but keeps a lone '<'", () => {
+    const clean = bg.plainAnalysis(F.XSS.join("\n"), "b");
+    assert.doesNotMatch(clean, /<(?:svg|img|script|PIECE|SQUARE|b>)|DROP_SVG/i);
     assert.match(clean, /\*\*bold text\*\*/);
     assert.match(clean, /&lt;img/);
+    assert.equal(bg.plainAnalysis("If a<b then the knight wins. Then 4. Nxe5 and (5... Qf6).", "w"),
+      "If a<b then the knight wins. Then 4.Nxe5 and (5...Qf6).");
+    assert.equal(bg.plainAnalysis("1. Develop\n\nBEST_MOVE: 4. Nxe5\nEVALUATION: x", "w"), "1. Develop");
     assert.equal(bg.plainAnalysis("The player's knight; a strong player beats the opponent.", "w"),
       "White's knight; a strong player beats Black.");
   });
+  test("Token redaction runs last and catches the saved token split by markup or Markdown", () => {
+    const token = "hf_SavedToken1234567890";
+    const echoes = [token, "hf_Saved<b></b>Token1234567890", "hf_**Saved**Token1234567890", "h_f_\x60Saved\x60Token1234567890",
+      "hf_Saved<!-- x -->Token1234567890", "hf_otherLookingToken99"];
+    const raw = [{ ...F.boneylandSuccess, analysis: echoes.join(" | "), evaluation: "Black is better, " + echoes[1] }];
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const r = bg.normalized(raw, "boneyland", req, "boneyland", 1, token);
+    const flat = JSON.stringify(r).replace(/[*_\x60~]/g, "");
+    assert.doesNotMatch(flat, /hfSaved|SavedToken1234567890|hfotherLooking/);
+    assert.match(r.analysis, /\[token removed\]/);
+    assert.equal(bg.scrub({ a: ["x hf_" + "A".repeat(8)] }, null).a[0], "x [token removed]");
+  });
   test("All background codes have a fixture, with same/different/permanent fallback precedence", () => {
     const cases = {
-      quota: [429, "You have exceeded your GPU quota"], token_rejected: [401, ""],
+      quota: [429, "You have exceeded your GPU quota"], token_rejected: [401, "", true],
       unreachable: [404, ""], asleep: [200, "<html>Building</html>"], busy: [0, "Queue is full"],
       illegal_position: [0, "Illegal move: e5"], game_over: [0, "The game is already over"],
       bad_response: [422, ""],
     };
     for (const [code, args] of Object.entries(cases)) assert.equal(bg.classify(...args), code);
     assert.equal(bg.classify(429, "rate limited"), "busy");
+    for (const status of [401, 403]) assert.equal(bg.classify(status, "", false), "unreachable", "no token was sent");
+    assert.equal(bg.retryAfter("30"), 30);
+    assert.equal(bg.retryAfter(new Date(Date.now() + 61000).toUTCString()), 61);
+    assert.equal(bg.retryAfter("soon"), undefined);
     assert.equal(bg.fallbackError("timeout", "timeout"), "timeout");
     assert.equal(bg.fallbackError("timeout", "asleep"), "all_unavailable");
     assert.equal(bg.fallbackError("asleep", "quota"), "quota");

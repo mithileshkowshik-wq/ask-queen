@@ -237,13 +237,45 @@ function runWorkerTests(test) {
         const code = (backup && second) || status;
         if (code === 200 && r.init.method === "POST") return start();
         return new Response(backup && secondBody ? secondBody : body, { status: code });
-      });
+      }, name === "token_rejected" ? { token: "hf_demoToken12345678" } : {});
       const p = w.open(best);
       await w.clock.advance(0);
       assert.equal(p.last.error.code, name.split(" ")[0]);
       assert.equal(w.output.filter((r) => r.init.method === "POST").length, status >= 500 || status === 404 ? 2 : 1);
     });
   }
+  test("Worker treats 401 without a token as a dead server and tries the backup", async () => {
+    const w = worker((r) => r.url.includes("boneyland") ? new Response("", { status: 401 }) : normal(r));
+    const p = w.open(best);
+    await w.clock.advance(0);
+    assert.equal(p.last.result.server, "hugging-apps");
+  });
+  for (const header of ["30", "date"]) {
+    test("Worker passes Retry-After (" + (header === "date" ? "HTTP date" : "seconds") + ") with the busy error", async () => {
+      const w = worker(() => new Response("Queue full", { status: 429, headers: { "retry-after":
+        header === "date" ? new Date(30000).toUTCString() : header } }));
+      const p = w.open(best);
+      await w.clock.advance(0);
+      assert.equal(p.last.error.code, "busy");
+      assert(Math.abs(p.last.error.retryAfter - 30) <= 1, String(p.last.error.retryAfter));
+    });
+  }
+  test("Worker tells a second tab that another tab is already asking", async () => {
+    const w = worker(normal);
+    w.open(best);
+    const other = w.open(makeRequest("best", F.START, ""), { tab: { id: 2 } });
+    assert.deepEqual(other.last.error, { code: "busy", detail: "Another tab is already asking Queen.", reason: "other_tab" });
+  });
+  test("Worker echoing the saved token in its answer never reaches the panel", async () => {
+    const token = "hf_SavedToken1234567890";
+    const echo = { ...F.boneylandSuccess, analysis: "Your key is hf_Saved<b></b>Token1234567890 and **" + token + "**" };
+    const w = worker(({ url, init }) => init.method === "POST" ? start() :
+      new Response(answer(url, echo), { headers: { "content-type": "text/event-stream" } }), { token });
+    const p = w.open(best);
+    await w.clock.advance(0);
+    assert.equal(w.output[0].init.headers.Authorization, "Bearer " + token);
+    assert.doesNotMatch(JSON.stringify(p.responses).replace(/[*_\x60~]/g, ""), /SavedToken1234567890/);
+  });
   test("Worker tries backup on a stream with no complete", async () => {
     const w = worker((r) => r.url.includes("boneyland") && r.init.method !== "POST"
       ? new Response(wire("heartbeat", null)) : normal(r));

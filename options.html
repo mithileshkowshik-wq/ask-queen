@@ -36,7 +36,9 @@
   .check label { margin: 0; font-weight: 400; }
   .help { color: var(--dim); font-size: 13.5px; }
   .warn { padding-left: 12px; border-left: 3px solid var(--amber); color: var(--amber); font-size: 13.5px; }
-  .saved { font-variant-numeric: tabular-nums; }
+  .saved { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .check input:disabled { opacity: .5; cursor: default; }
+  .check label { overflow-wrap: anywhere; }
   .saved code { padding: 2px 7px; border-radius: 5px; background: var(--raise); font: 14px ui-monospace, Menlo, Consolas, monospace; }
   a { color: var(--gold); text-underline-offset: 3px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
@@ -113,7 +115,7 @@
       address, and nothing else.
     </p>
     <p class="saved" id="custom-saved" data-testid="opt-custom-saved">No custom server saved.</p>
-    <form id="custom-form" novalidate>
+    <form id="custom-form" novalidate autocomplete="off">
       <div>
         <label for="origin">Space address</label>
         <input id="origin" data-testid="opt-custom-origin" type="url" placeholder="https://your-name-your-space.hf.space" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="custom-help custom-error">
@@ -127,9 +129,9 @@
       </div>
       <div class="check">
         <input id="consent" data-testid="opt-custom-consent" type="checkbox" aria-describedby="consent-help">
-        <label for="consent">Send my Hugging Face token to this server too</label>
+        <label for="consent" id="consent-label">Send my Hugging Face token to this server too</label>
       </div>
-      <p class="help" id="consent-help">Leave this off unless you trust whoever runs the server. Without it, questions go there with no token.</p>
+      <p class="help" id="consent-help">Enter the address first. Leave this off unless you trust whoever runs that server: without it, questions go there with no token. The choice covers that one address, and changing the address clears it.</p>
       <p id="custom-error" data-testid="opt-custom-error" role="alert"></p>
       <div class="row">
         <button type="submit" data-testid="opt-custom-save">Save custom server</button>

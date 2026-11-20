@@ -25,6 +25,9 @@ var AQ = globalThis.AQ = { adapters: [] };
     return best;
   };
 
+  // Layout-free visibility for AQ.gate(): only the hidden attribute and aria-hidden.
+  AQ.shown = (el) => !el.closest("[hidden], [aria-hidden='true']");
+  AQ.tag = (pgn, name) => new RegExp('^\\s*\\[' + name + '\\s+"([^"]*)"\\s*\\]', "im").exec(pgn)?.[1];
   AQ.hasBoard = (selector) => [...document.querySelectorAll(selector)].some((el) => !el.closest(MINI));
   AQ.transient = ".anim, .animating, .dragging, .ghost, .fading";
   AQ.readSan = (s) => {
@@ -53,17 +56,20 @@ var AQ = globalThis.AQ = { adapters: [] };
       valid: check.ok && !duplicate, reason: duplicate ? "Overlapping pieces" : check.reason };
   };
 
+  // A moving, dragged or fading piece means the scan can't be complete, so the board is unreadable until it settles
+  // (the open panel re-reads on the next mutation). A partial scan is never offered.
   AQ.scan = (el, squareOf, pieceOf, pieceSelector, highlights) => {
     const pieces = {};
-    let duplicate = false;
+    let duplicate = false, moving = false;
     for (const piece of el.querySelectorAll(pieceSelector)) {
-      if (piece.matches(AQ.transient)) continue;
+      if (piece.matches(AQ.transient)) { moving = true; continue; }
       const sq = squareOf(piece), role = pieceOf(piece);
       if (!sq || !role) continue;
       if (pieces[sq]) duplicate = true;
       pieces[sq] = role;
     }
-    return AQ.boardFromPieces(pieces, [...new Set(highlights.map(squareOf))], duplicate);
+    const board = AQ.boardFromPieces(pieces, [...new Set(highlights.map(squareOf))], duplicate);
+    return moving ? { ...board, valid: false, reason: "The board is moving" } : board;
   };
 
   AQ.fenWithSide = (board, side) => board.fen6 && side === board.side ? board.fen6 :
@@ -105,6 +111,12 @@ var AQ = globalThis.AQ = { adapters: [] };
     if (C.parseFen(fen)) return { moves, root: { fen, verified: false, source } };
     if (custom) return null;
     return { moves, root: { fen: C.START_FEN, verified: false, source: "standard" } };
+  };
+
+  // For the closed panel: URL and cheap selector checks only, no layout reads. readPosition() decides at click time.
+  AQ.gate = () => {
+    const adapter = AQ.adapters.find((a) => a.matches());
+    return { hasBoard: !!adapter, gate: adapter ? adapter.gate() : null };
   };
 
   AQ.readPosition = () => {

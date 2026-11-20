@@ -1,9 +1,21 @@
 // Ask Queen UI: a launcher and a non-modal panel inside one shadow root, so site CSS can't reach it.
 // Reads the page only through AQ.readPosition() and talks only to the background (docs/review/contract.md).
 (() => {
+  // Keys typed in the panel must not reach the site's shortcuts in either phase. The capture listener on window
+  // is registered before anything else here; the one on the host covers the bubble phase.
+  const host = document.createElement("div");
+  const onKey = (e) => {
+    if (!e.composedPath().includes(host)) return;
+    e.stopImmediatePropagation();
+    if (e.type === "keydown" && e.key === "Escape") closePanel(); // focus is inside the panel
+  };
+  for (const type of ["keydown", "keyup", "keypress"]) {
+    addEventListener(type, onKey, true);
+    host.addEventListener(type, onKey);
+  }
+
   const C = globalThis.AQChess;
   const PRIVACY_URL = "https://github.com/ask-queen/ask-queen/blob/main/PRIVACY.md";
-  const BOARD = "cg-board, wc-chess-board, chess-board";
   const CSS = `
 :host { all: initial !important; }
 * { box-sizing: border-box; margin: 0; }
@@ -44,8 +56,11 @@ h2 { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; fon
 .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
 .foot { padding: 8px 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11.5px; }
 
-.ask, .out { display: flex; flex-direction: column; gap: 12px; }
+.ask, .slot { display: flex; flex-direction: column; gap: 12px; }
 .out { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.out[hidden] { display: block !important; height: 0; margin: 0; padding: 0; border: 0; overflow: hidden; } /* kept in the accessibility tree so its live regions exist before they are written to */
+.pre:not(:empty), .live:not(:empty) { margin-bottom: 12px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 h3 { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
 .sub { color: var(--dim); font-size: 13px; }
 .disc { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 1.5px solid var(--ivory); border-radius: 50%; }
@@ -67,7 +82,9 @@ h3 { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
 .rank i:nth-child(even) { --sq: var(--line); }
 @keyframes step { 12% { background: var(--gold); } 34% { background: var(--sq); } }
 .clock { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.clock > span { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.clock > .live { flex: 1; }
+.timer { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.timer:empty { display: none; }
 .lead { font-weight: 600; }
 
 .caveat { display: flex; flex-direction: column; gap: 4px; padding-left: 10px; border-left: 3px solid var(--amber); color: var(--amber); font-size: 13px; }
@@ -112,18 +129,20 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     busy: ["Queen's servers are busy", "Too many questions are waiting right now, so give it a minute.", "Try again", "retry"],
     game_over: ["The game is over here", "This position is checkmate or stalemate, so there is no move to find.", "Back to the position", "dismiss"],
     bad_response: ["The server's format changed", "Check for an update to Ask Queen.", "Try the other server", "other"],
-    cancelled: ["The question was stopped", "It ended before Queen answered.", "Ask again", "retry"],
+    cancelled: ["The question was stopped", "It ended before Queen answered.", "Try again", "retry"],
     extension_reloaded: ["Ask Queen was updated", "Reload this page to keep using it.", "Reload this page", "reload"],
     all_unavailable: ["Both servers are unavailable", "Neither of Queen's free servers answered, so try again later or set up your own server.", "Try again", "retry"],
     unknown: ["Queen couldn't answer", "Something unexpected went wrong.", "Try again", "retry"],
   };
-  const errorCopy = (code, fromMoves) =>
-    code === "illegal_position" ? (fromMoves
+  const errorCopy = (code, fromMoves, reason) =>
+    code === "busy" && reason === "other_tab" ? ["Another tab is already asking Queen", "Queen answers one question at a time, so wait for that one to finish.", "Try again", "retry"]
+    : code === "illegal_position" ? (fromMoves
       ? ["Queen can't use this position", "The server rejected the moves it was sent, so Queen can work from the pieces instead.", "Work from the pieces", "pieces"]
       : ["Queen can't use this position", "The server says the position on the board isn't legal, often because the side to move is wrong.", "Back to the position", "dismiss"])
     : code === "mismatch" ? ["Queen analysed a different position", "Its answer was for another position, so it isn't shown.", ...(fromMoves ? ["Work from the pieces", "pieces"] : ["Ask again", "fresh"])]
     : ERRORS[code] || ERRORS.unknown;
 
+  const STALE = "The board has moved. This answer is for the earlier position.";
   const flip = (s) => (s === "w" ? "b" : "w");
   const h = (tag, props = {}, ...kids) => {
     const el = document.createElement(tag);
@@ -180,12 +199,18 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   };
 
   // --- shell ---
-  const host = h("div", { tid: "aq-host" });
+  host.setAttribute("data-testid", "aq-host");
   const root = host.attachShadow({ mode: "open" });
   const fab = h("button", { tid: "aq-launcher", className: "fab", hidden: true, onclick: openPanel }, deco("glyph", "♛︎"), "Ask Queen");
   const askBox = h("section", { tid: "aq-ask", className: "ask" });
-  const outBox = h("section", { tid: "aq-out", className: "out", hidden: true, tabIndex: -1 });
-  const body = h("div", { className: "body" }, askBox, outBox);
+  // Live regions are persistent and start empty: text written into a region that already exists is announced.
+  const statusBox = h("div", { tid: "aq-status", className: "live", role: "status" }); // thinking text, result headline
+  const alertBox = h("div", { tid: "aq-error", className: "live", role: "alert" });    // error headline and sentence
+  const live = h("div", { tid: "aq-live", className: "sr", role: "status" });           // gate, "board changed" and stale notes
+  const pre = h("div", { className: "slot pre" }), timerSlot = h("div", { className: "timer" }), post = h("div", { className: "slot" });
+  const outBox = h("section", { tid: "aq-out", className: "out", hidden: true, tabIndex: -1 },
+    pre, h("div", { className: "clock" }, statusBox, timerSlot), alertBox, post);
+  const body = h("div", { className: "body" }, live, askBox, outBox);
   const dockBtn = h("button", { tid: "aq-dock", className: "icon", onclick: toggleDock }, deco("", "←"));
   const setBtn = h("button", { tid: "aq-settings", className: "link", textContent: "Settings", onclick: openSettings });
   const panel = h("div", { tid: "aq-panel", className: "panel", hidden: true, tabIndex: -1, role: "dialog", "aria-label": "Ask Queen" },
@@ -200,21 +225,17 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   } catch { root.append(h("style", { textContent: CSS })); }
   root.append(fab, panel);
   document.documentElement.append(host);
-  // Keys typed in the panel must not reach the site's shortcuts. Only events from inside the shadow root get here.
-  for (const type of ["keydown", "keyup", "keypress"]) host.addEventListener(type, (e) => {
-    e.stopPropagation();
-    if (type === "keydown" && e.key === "Escape" && !panel.hidden) closePanel();
-  });
 
   // --- state ---
   let pos = null;       // the last AQ.readPosition()
   let side = null;      // side to move for the board fallback: "w" | "b" | null
   let useBoard = false; // the user chose to work from the pieces after a failed move-list ask
   let note = "";        // why the last click sent nothing
+  let gateText = "";    // the gate message, for the hidden status region
   let prefs = null;     // { firstUseSeen, dock }, kept by the background
   let shown = null;     // the result or error on screen: { ctx, error } or { ctx, banner, reask, lock }
   let prevFocus = null, path = location.pathname;
-  let reqId = 0, port = null, timer = null, asking = null; // asking: the ctx of the ask in flight
+  let reqId = 0, port = null, timer = null, retryTimer = null, asking = null; // asking: the ctx of the ask in flight
 
   const dead = () => { try { return !chrome.runtime?.id; } catch { return true; } };
   const bg = async (msg) => { try { return await chrome.runtime.sendMessage(msg); } catch { return null; } };
@@ -241,33 +262,37 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   function openSettings() { bg({ type: "openOptions" }); }
 
   // --- following the page ---
-  // Closed: each 1 s tick is one selector check and a string compare, never in a hidden tab. The page itself
-  // is read only after an event: a navigation or the board appearing (then twice more while the page settles),
-  // the tab coming back, or a click or key press (a game that just ended changes the gate without a navigation).
-  let seen = "", age = 0, nudged = 0;
-  const cheap = () => `${location.pathname}${location.search} ${!!document.querySelector(BOARD)}`;
+  // Closed: one layout-free AQ.gate() call a second, and only while the tab is visible. The interval is cleared
+  // when the tab is hidden or the panel is open. AQ.readPosition() is never called while the panel is closed.
+  let ticker = 0, prefsReady = null;
   async function showLauncher() {
-    seen = cheap();
-    const p = seen.endsWith("true") ? read() : null;
-    const ok = !!p && p.gate === null;
-    if (ok && !prefs) await loadPrefs();
+    let g = null;
+    try { g = AQ.gate(); } catch {}
+    const ok = !!g && g.hasBoard === true && g.gate === null; // anything else fails closed
+    if (ok && !prefs) await (prefsReady ||= loadPrefs());
     fab.hidden = !ok || !panel.hidden;
   }
-  function tick() {
-    if (document.hidden || !panel.hidden) return;
-    age = cheap() === seen ? age + 1 : 0;
-    if (seen.endsWith("true") ? [0, 2, 5].includes(age) : !age) showLauncher();
-  }
-  function nudge() {
-    if (nudged || !panel.hidden || !seen.endsWith("true")) return;
-    nudged = setTimeout(() => { nudged = 0; if (!document.hidden && panel.hidden) showLauncher(); }, 1000);
+  function watch() {
+    const on = panel.hidden && !document.hidden;
+    if (on === !!ticker) return;
+    if (on) ticker = setInterval(showLauncher, 1000);
+    else { clearInterval(ticker); ticker = 0; }
   }
   // Open: a debounced MutationObserver, at most 4 reads a second, each within 250 ms of the change.
-  let due = 0, lastRead = 0;
+  let due = 0, lastRead = 0, moving = 0;
   const watcher = new MutationObserver(schedule);
   function schedule() {
     if (due || document.hidden || panel.hidden) return;
-    due = setTimeout(() => { due = 0; lastRead = Date.now(); if (!panel.hidden) sync(); }, Math.max(100, 250 - (Date.now() - lastRead)));
+    due = setTimeout(() => {
+      due = 0;
+      lastRead = Date.now();
+      if (panel.hidden) return;
+      const p = read();
+      // Mid-animation the adapter reports an unreadable board. Keep the view and look again, for up to a second.
+      if (p?.gate === null && location.pathname === path && p.board?.reason === "The board is moving" && moving++ < 4) return schedule();
+      moving = 0;
+      sync(p);
+    }, Math.max(100, 250 - (Date.now() - lastRead)));
   }
   function sync(p = read(), why = "") {
     if (location.pathname !== path) { path = location.pathname; if (port) cancel(); } // navigation aborts the ask
@@ -278,12 +303,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     note = why;
     render();
   }
-  setInterval(tick, 1000);
-  addEventListener("pointerdown", nudge, { capture: true, passive: true });
-  addEventListener("keydown", nudge, { capture: true, passive: true });
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) panel.hidden ? showLauncher() : schedule(); });
+  document.addEventListener("visibilitychange", () => { watch(); if (!document.hidden) panel.hidden ? showLauncher() : schedule(); });
   fab.addEventListener("focus", (e) => { prevFocus = e.relatedTarget; });
-  tick();
+  watch();
+  showLauncher();
 
   async function openPanel() {
     fab.hidden = true;
@@ -293,15 +316,18 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     useBoard = false;
     note = "";
     panel.hidden = false;
+    watch();
     render();
     panel.focus();
     watcher.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   }
   async function closePanel() {
+    if (panel.hidden) return;
     watcher.disconnect();
     if (port) cancel(); // closing aborts an ask in flight; a finished answer stays for next time
     root.activeElement?.blur();
     panel.hidden = true;
+    watch();
     await showLauncher();
     // Focus order: the launcher, else what had focus before the panel opened, else the page body.
     if (!fab.hidden) fab.focus();
@@ -315,14 +341,16 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const gate = !pos ? "none" : pos.gate === null ? null : pos.gate || "unknown_context"; // anything unexpected fails closed
     const view = dead() ? "reloaded" : gate ? "gated" : prefs.firstUseSeen ? "ask" : "notice";
     panel.dataset.view = view;
+    gateText = "";
     setBtn.hidden = dockBtn.hidden = view === "gated"; // Close is the only action there
     if (view === "reloaded") { askBox.replaceChildren(); askBox.dataset.state = view; showError({ code: "extension_reloaded" }); }
     else if (view === "gated") {
       cancel(); // abort the ask and remove any answer
       const [title, sub] = GATES[gate] || GATES.unknown_context;
+      gateText = `${title}. ${sub}`;
       askBox.dataset.state = `gated-${gate}`;
       askBox.replaceChildren(
-        h("div", { role: "status" }, h("h3", { tid: "aq-gate", textContent: title }), h("p", { className: "sub", textContent: sub })),
+        h("div", {}, h("h3", { tid: "aq-gate", textContent: title }), h("p", { className: "sub", textContent: sub })),
         row(h("button", { tid: "aq-gate-close", className: "btn", textContent: "Close", onclick: closePanel })));
     }
     else if (view === "notice") {
@@ -331,7 +359,6 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
         h("h3", { textContent: "Before your first question" }),
         h("p", { tid: "aq-notice", textContent: "Ask Queen sends the position and the moves that led to it to free community servers on Hugging Face: boneyland/queen-pawn-8, with hugging-apps/queen-pawn-8 as the backup. They aren't run by Chess.com, Lichess, Princeton, Hugging Face or this extension's author, and the people who run them can see what is sent." }),
         h("p", { textContent: "Nothing else leaves your browser: no username, game link, clock or chat. If you add a Hugging Face token in Settings, it goes to those servers too." }),
-        h("p", { textContent: "Queen is a language model, so its explanations can be wrong." }),
         h("a", { tid: "aq-privacy-link", className: "link", href: PRIVACY_URL, target: "_blank", rel: "noopener noreferrer", textContent: "Privacy policy (opens in a new tab)" }),
         row(h("button", { tid: "aq-notice-ok", className: "btn primary", textContent: "Got it", onclick: () => { savePrefs({ firstUseSeen: true }); render(); panel.focus(); } })));
     }
@@ -347,6 +374,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     return f.join(" ");
   };
 
+  // The click-time snapshot the answer is checked against. When the page gave an exact FEN, its castling and
+  // en-passant fields go along, so an answer with different rights is caught too.
+  const snap = (b, s, exact) => ({ placement: b.placement, side: s, ...(b.fen6 && { castle: exact.split(" ")[2], ep: exact.split(" ")[3] }) });
+
   // The one place a request is built, so a button's label and what it sends can't drift apart.
   // Returns { label, msg, ctx } for the position on screen, or null when that ask isn't available.
   function build(mode) {
@@ -360,7 +391,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       const lastLabel = n && C.moveLabel(m[n - 1], fen, n - 1);
       return {
         label: played ? `Explain ${lastLabel}` : `Best move for ${NAME[toMove]}`,
-        msg: { mode, fen, moves: before.join(" "), played, snapshot: { placement: b.placement, side: toMove } },
+        msg: { mode, fen, moves: before.join(" "), played, snapshot: snap(b, toMove, b.fen6) },
         ctx: { mode, played, fromMoves: true, who: played ? flip(toMove) : toMove, lab: (san) => C.moveLabel(san, fen, before.length),
           what: played ? `Position before ${lastLabel}` : n ? `Position after ${lastLabel}` : startName() },
       };
@@ -369,8 +400,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const fen = boardFen(b, side);
     return {
       label: `Best move for ${NAME[side]}`,
-      msg: { mode, fen, moves: "", played: null, snapshot: { placement: b.placement, side } },
-      ctx: { mode, played: null, fromMoves: false, who: side, lab: (san) => (b.fen6 ? C.moveLabel(san, fen, 0) : san), what: "Position on the board" },
+      msg: { mode, fen, moves: "", played: null, snapshot: snap(b, side, fen) },
+      ctx: { mode, played: null, fromMoves: false, who: side, lab: (san) => C.moveLabel(san, fen, 0), what: "Position on the board" },
     };
   }
   const startName = () => (pos.root.source === "standard" ? "Starting position" : "Custom starting position");
@@ -380,7 +411,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const head = (title, sub, s) => kids.push(h("div", {}, h("h3", {}, s && disc(s), title), sub && h("p", { className: "sub", textContent: sub })));
     const btn = (q, tid, primary) => q && h("button", { tid, className: primary ? "btn primary" : "btn", textContent: q.label, onclick: () => ask(q.msg.mode) });
     let state = "board";
-    if (note) kids.push(h("p", { tid: "aq-changed", className: "caveat", role: "status", textContent: note }));
+    if (note) kids.push(h("p", { tid: "aq-changed", className: "caveat", textContent: note }));
     if (!b?.valid) {
       state = "unreadable";
       head("Can't read this board", "The pieces don't make a legal position right now. Step to another move, or wait for the pieces to settle.");
@@ -419,11 +450,17 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   }
 
   // --- request ---
-  function show(state, ...kids) {
+  const fill = (el, kids) => el.replaceChildren(...[kids].flat(2).filter(Boolean));
+  function show(state, { before, status, timer, alert, after }) {
     const focus = outBox.contains(root.activeElement);
+    clearInterval(retryTimer);
     outBox.dataset.state = state;
     delete outBox.dataset.code;
-    outBox.replaceChildren(...kids.flat().filter(Boolean));
+    fill(pre, before);
+    fill(statusBox, status);
+    fill(timerSlot, timer);
+    fill(alertBox, alert);
+    fill(post, after);
     outBox.hidden = false;
     if (focus) outBox.focus();
   }
@@ -436,9 +473,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     reqId++;
     stop();
     shown = null;
+    clearInterval(retryTimer);
     if (outBox.contains(root.activeElement)) panel.focus();
     outBox.hidden = true;
-    outBox.replaceChildren();
+    for (const el of [pre, statusBox, timerSlot, alertBox, post]) el.replaceChildren();
   }
 
   // Click time: read the page again. If it no longer matches what the button was labelled from, show the new
@@ -449,7 +487,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const q = build(mode);
     if (!q) return render();
     const { msg, ctx } = q;
-    if (asking && !fresh && asking.mode === mode && asking.fen === msg.fen && asking.moves === msg.moves) return; // a repeat click on the same ask
+    // A repeat click on the very same ask is ignored. Any other ask aborts the one in flight and is sent anew.
+    if (asking && !fresh && ["mode", "fen", "moves", "played"].every((k) => asking[k] === msg[k])) return;
     Object.assign(ctx, { key: from, side, useBoard, fen: msg.fen, moves: msg.moves });
     if (note) { note = ""; render(); }
 
@@ -460,13 +499,12 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const secs = h("span", { tid: "aq-timer", textContent: "0 s" });
     const hint = h("p", { tid: "aq-wait", className: "sub", textContent: "Usually 15 to 60 seconds." });
     const wait = (state, text) => { outBox.dataset.state = state; hint.textContent = text; };
-    show("thinking",
-      h("div", { className: "rank", "aria-hidden": "true" }, [...Array(8)].map((_, i) => h("i", { style: `animation-delay:${i * 0.2}s` }))),
-      h("div", { className: "clock" }, // the timer sits outside the live region, so it isn't announced
-        h("div", { role: "status" }, h("p", { className: "lead", textContent: "Queen is thinking…" }),
-          h("p", { className: "sub", textContent: `${ctx.what}, ${NAME[ctx.who]} to move` }), hint),
-        secs),
-      h("button", { tid: "aq-cancel", className: "link", textContent: "Cancel", onclick: cancel }));
+    show("thinking", {
+      before: h("div", { className: "rank", "aria-hidden": "true" }, [...Array(8)].map((_, i) => h("i", { style: `animation-delay:${i * 0.2}s` }))),
+      status: [h("p", { className: "lead", textContent: "Queen is thinking…" }), h("p", { className: "sub", textContent: `${ctx.what}, ${NAME[ctx.who]} to move` }), hint],
+      timer: secs, // outside the status region, so the seconds aren't announced
+      after: h("button", { tid: "aq-cancel", className: "link", textContent: "Cancel", onclick: cancel }),
+    });
     timer = setInterval(() => {
       const s = Math.round((Date.now() - t0) / 1000);
       if (!document.hidden) secs.textContent = `${s} s`;
@@ -504,13 +542,16 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   // The board moved after the ask: flag the answer, offer one re-ask for the position now on the board, and
   // switch off the actions that would repeat the old one.
   function refreshStale() {
-    if (!shown?.banner) return;
-    const stale = key(pos) !== shown.ctx.key;
-    const q = stale && (build(shown.ctx.mode) || build("best"));
-    shown.banner.hidden = !stale;
-    shown.reask.hidden = !q;
-    if (q) Object.assign(shown.reask, { textContent: q.label, onclick: () => ask(q.msg.mode) });
-    for (const b of shown.lock) b.disabled = stale;
+    const stale = !!shown?.banner && key(pos) !== shown.ctx.key;
+    if (shown?.banner) {
+      const q = stale && (build(shown.ctx.mode) || build("best") || build("explain")); // whichever ask the new position allows
+      shown.banner.hidden = !stale;
+      shown.reask.hidden = !q;
+      if (q) Object.assign(shown.reask, { textContent: q.label, onclick: () => ask(q.msg.mode) });
+      for (const b of shown.lock) b.disabled = stale;
+    }
+    const text = gateText || note || (stale ? STALE : "");
+    if (live.textContent !== text) live.textContent = text;
   }
 
   function showResult(r, ctx) {
@@ -532,20 +573,20 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     } });
     const redo = h("button", { tid: "aq-ask-again", className: "btn", textContent: "Ask again", onclick: () => again(ctx, { fresh: true }) });
     const reask = h("button", { tid: "aq-stale-reask", className: "btn" });
-    const banner = h("div", { tid: "aq-stale", className: "caveat", role: "status", hidden: true },
-      h("p", { textContent: "The board has moved. This answer is for the earlier position." }), row(reask));
+    const banner = h("div", { tid: "aq-stale", className: "caveat", hidden: true }, h("p", { textContent: STALE }), row(reask));
 
-    show("result", banner,
-      h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`),
-      h("div", { role: "status" }, h("h3", { tid: "aq-headline", textContent: title })),
-      other && h("div", { tid: "aq-truncated", className: "caveat" }, h("p", { textContent: "The answer was cut off." }), other),
+    show("result", {
+      before: [h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`), banner],
+      status: h("h3", { tid: "aq-headline", textContent: title }),
+      after: [other && h("div", { tid: "aq-truncated", className: "caveat" }, h("p", { textContent: "The answer was cut off." }), other),
       verdict && h("p", { tid: "aq-verdict", className: "sub", textContent: verdict }),
       r.best?.source === "prose_verified" && h("p", { tid: "aq-from-text", className: "sub", textContent: "This move was taken from Queen's text." }),
       !best && r.suggestion?.san && h("p", { tid: "aq-suggestion", className: "caveat", textContent: `Queen's text suggests ${ctx.lab(r.suggestion.san)} (unverified)` }),
       facts.length && h("dl", {}, facts.flatMap(([tid, k, v]) => [h("dt", { textContent: k }), h("dd", { tid, textContent: v })])),
       analysis,
       row(copy, redo),
-      h("p", { tid: "aq-result-footer", className: "raw", textContent: `Answered by ${SERVER[r.server] || "Queen's server"} in ${Math.round(r.seconds) || 0} s${r.cached ? " · cached" : ""}` }));
+      h("p", { tid: "aq-result-footer", className: "raw", textContent: `Answered by ${SERVER[r.server] || "Queen's server"} in ${Math.round(r.seconds) || 0} s${r.cached ? " · cached" : ""}` })],
+    });
     shown = { ctx, banner, reask, lock: [redo, other].filter(Boolean) };
     body.scrollTop = 0;
     refreshStale();
@@ -553,7 +594,9 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
 
   function showError(error, ctx) {
     const code = error?.code || "unknown";
-    const [title, sentence, label, action] = errorCopy(code, ctx?.fromMoves);
+    const extra = (k) => error?.[k] ?? error?.detail?.[k]; // reason and retryAfter sit on the error, or inside an object detail
+    const detail = typeof error?.detail === "string" ? error.detail : error?.detail?.message || "";
+    const [title, sentence, label, action] = errorCopy(code, ctx?.fromMoves, extra("reason"));
     const retry = () => again(ctx, {});
     const act = {
       retry,
@@ -565,14 +608,24 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       reload: () => location.reload(),
     }[action];
     const go = h("button", { tid: "aq-error-action", className: "btn primary", textContent: label, onclick: act });
-    show("error",
-      ctx && h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`),
-      h("div", { tid: "aq-error", role: "alert" }, h("h3", { textContent: title }), h("p", { textContent: sentence })),
-      row(go),
-      code === "all_unavailable" && h("button", { tid: "aq-error-custom", className: "link", textContent: "Set up a custom server", onclick: openSettings }),
-      h("details", { tid: "aq-error-details" }, h("summary", { textContent: "Details" }),
-        h("p", { className: "raw", textContent: `${code}${error?.detail ? `: ${String(error.detail).slice(0, 500)}` : ""}` })));
+    show("error", {
+      before: ctx && h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`),
+      alert: [h("h3", { ...(code === "mismatch" && { tid: "aq-headline" }), textContent: title }), h("p", { textContent: sentence })], // a mismatch replaces the result headline
+      after: [row(go),
+        code === "all_unavailable" && h("button", { tid: "aq-error-custom", className: "link", textContent: "Set up a custom server", onclick: openSettings }),
+        h("details", { tid: "aq-error-details" }, h("summary", { textContent: "Details" }),
+          h("p", { className: "raw", textContent: `${code}${detail ? `: ${String(detail).slice(0, 500)}` : ""}` }))],
+    });
     outBox.dataset.code = code;
+    // The server asked for a pause (Retry-After): the retry button counts down and stays off until then.
+    const until = Date.now() + Math.min(600, Math.max(0, Math.ceil(Number(extra("retryAfter")) || 0))) * 1000;
+    const countdown = () => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      go.disabled = left > 0;
+      go.textContent = left > 0 ? `Try again in ${left} s` : label;
+      if (left <= 0) clearInterval(retryTimer);
+    };
+    if (action === "retry" && until > Date.now()) { retryTimer = setInterval(countdown, 1000); countdown(); }
     shown = ctx ? { ctx, error: true } : null;
     refreshStale();
   }
