@@ -1,4 +1,4 @@
-# Ask Queen: scoring rubric (v2, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
+# Ask Queen: scoring rubric (v3, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
 
 A **9** means "ready to submit to the Chrome Web Store, and a serious club player would trust it". The target behaviour is defined in [`spec.md`](spec.md), which this rubric cites by section (§).
 
@@ -6,21 +6,11 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
 1. Score each criterion from 0 to 10 in steps of 0.5.
    - **Levels 6, 9 and 10** are lists of positive **conditions**. Each bullet or lettered item counts as one condition. A level is earned only when every condition at that level and at the levels below it is met.
    - **The text at level 3** only describes what such a build typically looks like. It is not a requirement. Any build that meets all the level-6 conditions scores at least 6, whatever the level-3 text says.
-   - **The table below is the only rule for scores that fall between anchors.**
-
-   | Score | Rule |
-   |---|---|
-   | 0–2 | Doesn't even fit the level-3 description (for example, the feature is missing). |
-   | 3 | Fits the level-3 description. |
-   | 4–5 | Some of the level-6 conditions are met: 4 for under half, 5 for half or more. |
-   | 6 | All level-6 conditions are met. |
-   | 6.5 | Level 6, plus at least one level-9 condition. |
-   | 7 | Level 6, plus at least half of the level-9 conditions. |
-   | 8 | Every level-9 condition but one is met. |
-   | 8.5 | As for 8, and the missing condition is partly met, with evidence. |
-   | 9 | All level-9 conditions are met. |
-   | 9.5 | Level 9, plus at least half of the level-10 conditions. |
-   | 10 | All level-10 conditions are met. |
+   - **The formula below is the only rule, and it gives exactly one score.** `⌊x⌋₀.₅` means round x down to the nearest 0.5. `n6/N6`, `n9/N9` and `n10/N10` are the number of conditions met out of the total at each level.
+     - **0** if the build doesn't fit the level-3 description at all (for example, the feature is missing).
+     - **Not all level-6 conditions met:** score = `3 + ⌊2.5 × n6/N6⌋₀.₅`, which gives 3 to 5.5.
+     - **All level-6 conditions met, not all level-9:** score = `6 + ⌊2.5 × n9/N9⌋₀.₅`, which gives 6 to 8.5.
+     - **All level-9 conditions met:** score = `9 + ⌊n10/N10⌋₀.₅`, which gives 9, 9.5 (half or more of level 10) or 10 (all of level 10).
 2. **No evidence, no credit.** A condition counts as met only when you cite one of these:
    - a passing test name in `docs/review/evidence/round-N/report.json`
    - a `file:line`
@@ -89,7 +79,10 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - one request in flight per browser, and duplicate clicks coalesced
   - a bounded session cache, with "Ask again" bypassing it with a new seed
   - an overall deadline of 150 s or less, with a "still waiting" message at 60 s
-  - two separate E2E tests: a stream of heartbeats only, lasting 90 s and then completing, still delivers its answer; and a stream with no bytes at all ends in `timeout` at 45 s
+  - two separate E2E tests (§4.1):
+    - **Survival:** a stream of heartbeats only, lasting 90 s and then completing, still delivers its answer with no fallback.
+    - **Timeout:** a silent primary is aborted at 45 s and the backup is tried once. With the backup also silent, the ask ends in `timeout` within 150 s.
+  - every failure lands in a named state, including "both servers unavailable"
   - a configurable custom server through an optional host permission, and the result names the server that answered
 - **10:** Everything in 9, plus `Retry-After` is honoured and shown, a "both servers unavailable" state links to custom-server setup, and duplicate asks from two tabs produce one GPU job.
 
@@ -122,7 +115,7 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
 
 ### C5. Accessibility (7)
 - **3:** Mouse-only flows, or focus is lost on close, or there are no announcements.
-- **6:** The whole flow works by keyboard with visible focus. Focus moves into the panel on open and back to the launcher on close. Text contrast is 4.5:1 or better. Reduced motion is honoured. Every control has an accessible name.
+- **6:** The whole flow works by keyboard with visible focus. Focus moves into the panel on open and follows the spec §6 close order (normally back to the launcher). Text contrast is 4.5:1 or better. Reduced motion is honoured. Every control has an accessible name.
 - **9:** All of §6:
   - Live regions: `status` for thinking and result, `alert` for errors, and the timer is not announced.
   - Escape closes the panel only when focus is inside it.

@@ -1,0 +1,49 @@
+{
+  "reviewer": "gpt-6.2-astra",
+  "approve": false,
+  "required_changes": [
+    {
+      "doc": "rubric.md",
+      "section": "Scoring procedure 1 and H9",
+      "change": "Make the score table yield one score for every condition count. Specify precedence for overlapping rows, require level 6 before awarding 8 or 8.5, and either define the individual scores in 0–2 or collapse that range to one score.",
+      "why": "A build meeting all of C2(6) and five of its nine listed level-9 conditions qualifies for both 6.5 and 7. That choice determines whether C2 triggers H9's 8.5 cap. C8 has a single level-9 bullet, so missing it also satisfies the literal ‘every condition but one’ rule for 8."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§3.2–3.3, standard-root verification at zero plies",
+      "change": "At zero plies, compare the scanned placement and known side directly with the proposed root. Use the board fallback when they differ.",
+      "why": "An untagged custom analysis position can have White to move, all 32 pieces, and knights already on f3 and f6. With no moves or highlight, the piece count is the only active check. The spec therefore verifies the standard start and sends it even though the visible board differs, triggering H1b."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§3.3, 3.6 and 11, Explain response validation",
+      "change": "Require the selected move applied to the returned pre-move position to reproduce the click-time placement. Add a negative Explain fixture with an unrelated piece displaced and a positive fixture for the matching pre-move reply. This needs only a single-move check.",
+      "why": "For Explain 3.Bc4, take the correct pre-move reply and move its a2 pawn to a3. All four listed checks pass. The differences are f1, c4, a2 and a3, White is to move, and c4 changes from empty to a white bishop. Playing Bc4 still leaves the pawn on a3, so the panel accepts analysis of a different position."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§4.1, 4.3 and 11, and rubric C2(9)",
+      "change": "Specify that a silent primary attempt aborts at 45 seconds and starts the backup. If the test expects a user-visible terminal timeout at 45 seconds, make the silent stream the final eligible attempt and measure from its start.",
+      "why": "Section 4.1 and C2 say the silent stream ends in `timeout` at 45 seconds. Section 4.3 requires a backup on that same idle timeout. A primary that times out at 45 seconds and then receives a successful backup answer should have one unambiguous expected result."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§2 entry rules, §6 focus, and rubric C5(6)",
+      "change": "Define where Close returns keyboard focus after navigation to a gated page. Use the launcher when it is present and a named, focusable page target when the launcher is hidden.",
+      "why": "Section 2 requires a Close-only panel after navigation to an ongoing game, where the launcher is hidden. Section 6 and C5(6) require Close to focus that launcher. The required focus outcome is impossible on this path."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§1 token storage and rubric H3",
+      "change": "Correct the stated default for `chrome.storage.local`. If it holds the token, explicitly restrict access to `TRUSTED_CONTEXTS` before storing the token and verify the restriction from a content script.",
+      "why": "Chrome exposes local extension storage to content scripts by default. Relying on the default described in §1 would expose the token and trigger H3's 4.0 cap. [Chrome Storage API documentation](https://developer.chrome.com/docs/extensions/reference/api/storage#storage_areas)"
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§4.7 and 7, token transmission",
+      "change": "Make §7's payload rule conditional on consent for the destination. A request to a custom origin must omit the Authorization header until the user approves sending the token there.",
+      "why": "With a saved token and an unapproved custom origin, §7 says to send the token and §4.7 says to omit it. The network allowlist test and privacy policy need the same expected behavior."
+    }
+  ],
+  "optional_suggestions": []
+}

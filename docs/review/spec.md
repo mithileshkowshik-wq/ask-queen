@@ -1,4 +1,4 @@
-# Ask Queen: target spec (what a 9/10 looks like), v2
+# Ask Queen: target spec (what a 9/10 looks like), v3
 
 This spec is merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts. The rubric cites its sections as §N. The fixed constraints are listed in `rubric.md`.
 
@@ -11,7 +11,12 @@ This spec is merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts. The r
 - Content scripts run on `https://www.chess.com/*` and `https://lichess.org/*` only, in the top frame. Host-wide matching is justified because board pages on these sites have no common path prefix, and chess.com navigates as an SPA.
 - `minimum_chrome_version` equals the version the E2E runs on.
 - **The background service worker is the only code that touches the network.**
-  - Only the background and the options page access the token. Content scripts cannot read it: for example, call `chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"})`, which is the default, and assert it in a test. Any panel preferences then go through the background.
+  - Only the background and the options page access the token.
+  - **`chrome.storage.local` is exposed to content scripts by default** (Chrome docs), so the build must do one of these:
+    - The background calls `chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"})` on install and on every service-worker startup, before any token is stored or read.
+    - The token is kept in a store that content scripts can't reach.
+  - A test asserts that a read of the token key from a content script fails.
+  - Any panel preferences then go through the background.
   - One port per request. Messages are `{status}`, `{result}` or `{error: {code, detail}}`.
   - The background checks `sender.id` and validates the payload:
     - FEN by regex, at most 100 characters
@@ -21,7 +26,7 @@ This spec is merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts. The r
 ## 2. Scope and fair play (fail closed)
 - **Single purpose:** explain a position from a finished or analysed game of standard chess on chess.com or lichess with the QUEEN model.
 - **Where the launcher appears.** It appears only where the adapter has positive evidence of one of these: a finished game, Game Review, an analysis board or a study. If a board is present but that can't be established, show nothing.
-- **Games in progress get no UI.** That covers live, daily and correspondence games, as a player or a spectator. It includes lichess analysis of an ongoing correspondence game. Puzzles, solved or unsolved, are out of scope and get no launcher.
+- **Games in progress get no UI.** That covers live, daily and correspondence games, as a player or a spectator. It includes lichess analysis of an ongoing correspondence game. Puzzles, solved or unsolved, are out of scope and get no launcher. If a puzzle is reached with the panel open, the panel shows "Queen isn't available on puzzles".
 - **Standard chess only.** Chess960 and every other variant are out of scope.
 - **Entry rules** for out-of-scope pages:
   - **Arriving directly** on an in-progress game, a variant or a puzzle: the launcher is hidden and no requests are made.
@@ -58,17 +63,24 @@ This spec is merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts. The r
 **Pre-send.** Whenever both a move list and a board scan exist, all of these must hold:
 1. The side to move, computed from the root's side and the ply parity, agrees with the side derived from the highlight, when the highlight can be read.
 2. The number of pieces on the board equals the root's piece count (32 for the standard start) minus the captures in the list.
-3. The piece type and colour of the last SAN sit on its destination square. For castling, the king and rook are on their castled squares; for a promotion, the promoted piece is. This check is skipped at zero plies.
+3. The piece type and colour of the last SAN sit on its destination square. For castling, the king and rook are on their castled squares; for a promotion, the promoted piece is.
+4. **At zero plies:** the scanned placement must equal the root's placement exactly, and the known side, if any, must match. An untagged custom position therefore never passes as the standard start.
 
 On a mismatch, discard the list, use the board, and say "The move list and the board disagree, so Queen will work from the pieces." (The 10-level version uses a full SAN replay that reproduces the scanned placement instead.)
 
 **Post-response.** Check the returned `fen` against the **click-time snapshot** (§3.5), never against the live board, because the user may step through moves while waiting.
 - **Best move:** the returned placement **and** side must equal the snapshot's.
-- **Explain:** all of these must hold:
-  - The returned side is the mover of the played move.
-  - The returned placement differs from the snapshot on 2 to 4 squares, and those squares include the played SAN's destination.
-  - In the returned position, the destination does not hold a piece of the mover's colour.
-  - In the snapshot, the destination holds the mover's piece of the SAN's piece type (for a promotion, the promoted piece).
+- **Explain:** the returned side must be the mover of the played move, **and applying the played SAN to the returned position must reproduce the snapshot's placement exactly.** This is a single-move check, not full move generation.
+  - **Squares that may differ:**
+    - a normal move: exactly the from-square and the to-square
+    - en passant: from, to and the captured pawn's square
+    - castling: the king and rook squares
+  - **What each differing square must hold:**
+    - The from-square holds the moving piece (a pawn for a promotion) in the returned position and is empty in the snapshot.
+    - The to-square holds the moved piece (the promoted piece for a promotion) in the snapshot.
+    - Every other square is identical.
+  - The SAN's piece letter, its disambiguation and its destination must match the squares found.
+  - Fixtures: one positive (the correct pre-move reply) and one negative (the same reply with an unrelated piece moved, for example a2 to a3, which must be rejected).
 
 On a mismatch, replace the result with "Queen analysed a different position" and offer the board fallback.
 
@@ -129,7 +141,7 @@ The matrix covers each of these:
 - At 60 s, show "Still waiting. Free servers queue requests."
 - A keepalive crosses the port at least every 20 s so the service worker stays alive. Two E2E tests prove this:
   - **Survival:** a mocked stream that sends only heartbeats for 90 s and then completes. The original attempt must deliver its answer, with no fallback.
-  - **Timeout:** a mocked stream that sends no bytes. It must end in `timeout` at 45 s, with the worker still alive to report it.
+  - **Timeout:** the primary stream sends no bytes. At 45 s the client aborts it (the mock observes the abort) and tries the backup once, as §4.3 requires. With the backup also silent, the ask ends in `timeout` at about 90 s, inside the 150 s overall deadline, with the worker still alive to report it. A second variant has the backup answer, and the ask must succeed.
 - Deterministic synthetic fixtures are allowed for hangs and injected failures.
 
 ### 4.2 Cancellation
@@ -140,7 +152,8 @@ Cancel, closing the panel, a new ask, navigation and closing the tab all abort t
 - **Never fall back** on quota, a rejected token, an illegal position, game over, cancel, or `bad_response`. ZeroGPU quota is per visitor, so a second Space only wastes a community GPU job.
 
 ### 4.4 Error codes (assigned in the background, never by regex in the panel)
-`quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`.
+`quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, and `all_unavailable` (both servers failed with transient errors).
+- `busy` means a Gradio queue-full message, or an HTTP 429 without quota wording.
 - Each code has a test fixture.
 - `illegal_position` from a move list offers the board fallback.
 - **Validate the response shape:** `analysis` must be a string, `best_move_san` a string or null, and `fen` a string. Anything else is `bad_response` ("The server's format changed. Check for an update."). Discard any HTML or SVG supplied by the server.
@@ -149,10 +162,11 @@ Cancel, closing the panel, a new ask, navigation and closing the tab all abort t
 Moves are trusted in this order (**source precedence**). Only verified moves (the first two levels) may become the headline or drive the agree/disagree verdict.
 1. **Structured (verified):** the Space's `best_move_san` when `move_source` is `best_move` or `critical_line`. The Space checks these for legality.
 2. **Prose confirmed by the server (verified):** a SAN taken from the prose that passes the §3.2 pattern (case-sensitive, never `/i`) **and** matches the first legality-checked move the Space returned (`critical_line_uci[0]` on boneyland, `critical_line.legal_steps[0].uci` on hugging-apps). It is labelled "taken from Queen's text".
+   - **How to match SAN against UCI:** take the piece on the UCI from-square in the returned `fen`. Its type must equal the SAN piece (a pawn if there is no letter). The UCI to-square must equal the SAN destination, and the promotion letters must agree. For castling, compare against `e1g1`, `e1c1`, `e8g8` or `e8c8`.
 3. **Unverified prose:** passes the pattern but has no server confirmation, so it may be illegal (for example `Qh5` at the start). The card headline reads "Queen didn't name a clear move", the move appears only as "Queen's text suggests X (unverified)", and there is no verdict.
 4. **`promising_or_analysis` or `random_legal_fallback` guesses from the server:** never shown as Queen's move. If one conflicts with the prose, the prose wins under rule 2 or 3.
 
-**Expected card for the recorded truncated reply** (`test/fixtures/boneyland-truncated.sse`): the headline is "Queen didn't name a clear move". "The answer was cut off" sits at the top, with "Try the other server". Then "Queen's text suggests 3...Be7 (unverified)". There is no verdict, no evaluation row (it is null), and no critical-line row (it is empty). The analysis text follows.
+**Expected card for the recorded truncated reply** (`test/fixtures/boneyland-truncated.sse`): the headline is "Queen didn't name a clear move". "The answer was cut off" sits directly under the headline, with "Try the other server". Then "Queen's text suggests 3...Be7 (unverified)". There is no verdict, no evaluation row (it is null), and no critical-line row (it is empty). The analysis text follows.
 
 - **Truncation:** a truncated answer (`finish_reason: "length"`) is flagged at the top, with a "Try the other server" action.
 - Never render `raw_text` or `<PIECE_…>` / `<SQUARE_…>` tokens.
@@ -210,7 +224,7 @@ Moves are trusted in this order (**source precedence**). Only verified moves (th
 - stale
 
 **Errors**
-- one per error code
+- one per error code, including `all_unavailable` ("both servers unavailable")
 - extension reloaded
 
 ### 5.2 Copy rules
@@ -238,7 +252,10 @@ Moves are trusted in this order (**source precedence**). Only verified moves (th
 The open panel must cover neither the board nor the site's move navigation at 1280×800 and 1440×900 on both review fixtures. Failing that, it must have a one-action dock left/right toggle that is remembered.
 
 ## 6. Accessibility (WCAG 2.2 AA for the extension's UI)
-- **Focus.** Everything is reachable by keyboard. Opening the panel moves focus inside it. Closing returns focus to the launcher.
+- **Focus.** Everything is reachable by keyboard. Opening the panel moves focus inside it. Closing the panel moves focus to the first of these that applies:
+  1. the launcher, if it is visible
+  2. the page element that had focus before the panel opened, if it is still in the document
+  3. `document.body`, for example after navigating to a page where the launcher is hidden
 - **The panel is a labelled dialog** that is non-modal, with no focus trap.
 - **Escape** closes the panel only when focus is inside it. Panel key events don't reach the site's shortcut handlers.
 - **Live regions.** Thinking and the result headline use `role="status"`; errors use `role="alert"`. The elapsed timer is not announced.
@@ -254,7 +271,7 @@ The open panel must cover neither the board nor the site's move navigation at 12
 ## 7. Security and privacy
 - **The only HTML sink** is the escape-first renderer. It is tested with a corpus that includes `<img onerror>`, `"><svg onload>`, `javascript:`, nested `**<b>**`, entities, and the hugging-apps HTML outputs. The output may contain only `p, ul, ol, li, h4, strong, em, code`, with a numeric `li[value]` as the only attribute.
 - **The token** is accessed only by the background and the options page, as set out in §1. It is never logged, never synced, and never sent anywhere except as `Authorization` over HTTPS to the configured servers. A test asserts this.
-- **Each click sends** the FEN, the SAN moves, the generation parameters, and the token if one is set. Nothing else is sent: no usernames, game IDs, URLs, clocks or chat, and there are no analytics. An E2E network allowlist asserts this.
+- **Each click sends** the FEN, the SAN moves and the generation parameters. The token is added only if one is set **and** the destination is a built-in server or a custom origin the user approved for the token (§4.7). Otherwise the request carries no `Authorization` header. Nothing else is sent: no usernames, game IDs, URLs, clocks or chat, and there are no analytics. An E2E network allowlist asserts this.
 - **First-use notice** names the third-party servers and links to the privacy policy.
 - **`PRIVACY.md`**, also hosted at a public URL, states:
   - what is sent and to whom (their operators can see the request and headers)
@@ -385,6 +402,20 @@ Every blocking change from all three reviewers was applied:
 - shadow-root evidence for axe
 - `_locales` allowed in the zip
 - the live lichess check made optional
+
+## Changes in v3 (agreement round C)
+- **Token access:** corrected the default; `storage.local` is exposed to content scripts, so restricting it is mandatory and tested.
+- **Timeout test:** now consistent with the fallback rule.
+- **Zero-ply root:** compared exactly against the board.
+- **Explain check:** the single-move application check, with a negative fixture.
+- **Close focus:** the order for where focus goes on close.
+- **Custom-origin token:** consent rule added to §7.
+- **Scoring:** a deterministic formula.
+- **Smaller additions:**
+  - the puzzle message
+  - the `busy` and `all_unavailable` codes
+  - how to match SAN against UCI
+  - placement of the truncation notice
 
 ## Recorded dissent (from the drafts)
 - **Closing the panel.** The Fable draft wanted an in-flight answer to keep running after the panel closes, with an "answer ready" launcher state. The Opus and GPT-6.2-astra drafts wanted close to cancel. The majority won: §4.2 has close cancel the request.
