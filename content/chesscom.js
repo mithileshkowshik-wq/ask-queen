@@ -4,17 +4,23 @@
   // Live Game Review (2026-11-19): div.main-line-row.move-list-row[data-whole-move-number] > div.node[data-node="0-N"].
   const LIST = "wc-simple-move-list .node, .move-list .node, .move-list-row .node, vertical-move-list .node, .play-controller-moveList .node";
   const VARIATION = ".subline, .variation, [class*='subline']";
-  const USER_MARK = /rgb\((?:235, 97, 80|172, 206, 89|82, 176, 220|255, 170, 0)\)/;
+  const MOVE_LIST = "wc-simple-move-list, .move-list, .move-list-container, vertical-move-list, .play-controller-moveList";
+  // Right-click mark colours (red, green, blue, orange), in rgb() or rgba() form.
+  const USER_MARK = /rgba?\(\s*(?:235,\s*97,\s*80|172,\s*206,\s*89|82,\s*176,\s*220|255,\s*170,\s*0)\s*[,)]/;
   const FIGURINES = { n: "N", b: "B", r: "R", q: "Q", k: "K",
     "♘": "N", "♞": "N", "♗": "B", "♝": "B", "♖": "R", "♜": "R", "♕": "Q", "♛": "Q", "♔": "K", "♚": "K" };
 
   const RESULT = /^\s*(?:1\s*[-–]\s*0|0\s*[-–]\s*1|½\s*[-–]\s*½|1\/2\s*[-–]\s*1\/2)\s*$/;
-  // PGN is exposed in the share panel's textarea (or a data-pgn attribute); only text that starts with a tag counts.
-  const pgnText = () => [...document.querySelectorAll("textarea, [data-pgn]")].map((el) => el.value ?? el.dataset.pgn)
+  // PGN only from the share panel's read-only textarea or a data-pgn on the board or its layout, never from a box the
+  // user can type in; only text that starts with a tag counts.
+  const pgnText = () => [...document.querySelectorAll(`textarea.share-menu-tab-pgn-textarea[readonly],
+      .share-menu-tab-pgn-section textarea[readonly], wc-chess-board[data-pgn], chess-board[data-pgn],
+      .board-layout-main[data-pgn], .board-layout-chessboard[data-pgn]`)].map((el) => el.value ?? el.dataset.pgn)
     .filter((text) => /^\s*\[\w+\s+"/.test(text || "")).join("\n");
 
   // Fail closed. Puzzles and variants first. Any page tied to a game (/game/…, /analysis/game/…, Game Review) needs a
-  // finished game on screen: a result token or a game-over container. "tab=review" and "/review" only label the page.
+  // finished game on screen: a result token in the move list, a game-over element in the main board layout, or the
+  // share PGN's [Result]. A running clock always means the game is on. "tab=review" and "/review" only label the page.
   // Only the standalone analysis board (no game id) is open without that evidence.
   function scope(visible, pgn) {
     const path = location.pathname;
@@ -32,8 +38,10 @@
         })) return { page, gate: "variant" };
     if (analysis && !game && !review) return { page, gate: null };
     if (!game) return { page, gate: "unknown_context" };
-    const finished = [...document.querySelectorAll(".game-over-modal, .game-over-header, .game-over-modal-content")].some(visible) ||
-      [...document.querySelectorAll(".game-result, .board-layout-sidebar .result, [data-game-result]")]
+    if ([...document.querySelectorAll(".clock-component.clock-player-turn, .clock-running")].some(visible)) return { page, gate: "in_progress" };
+    const layout = ".board-layout-main, .board-layout-chessboard";
+    const finished = [...document.querySelectorAll(`:is(${layout}) :is(.game-over-modal, .game-over-header, .game-over-modal-content)`)].some(visible) ||
+      [...document.querySelectorAll(`:is(${MOVE_LIST}) :is(.game-result, [data-game-result])`)]
         .some((el) => visible(el) && RESULT.test(el.dataset.gameResult || el.textContent)) ||
       RESULT.test(AQ.tag(pgn, "Result") || "");
     return { page, gate: finished ? null : "in_progress" };
@@ -41,15 +49,16 @@
 
   function san(el) {
     function walk(node) {
-      if (node.nodeType === Node.TEXT_NODE) return node.textContent.replace(/[♔-♟]/gu, (c) => FIGURINES[c] || c);
+      // Each text node is trimmed (live markup pads the text around figurines: "<span data-figurine=B></span> f4 "),
+      // but a space inside one node ("e 4") stays and fails strict SAN.
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent.trim().replace(/[♔-♟]/gu, (c) => FIGURINES[c] || c);
       if (node.nodeType !== Node.ELEMENT_NODE) return "";
       const figurine = node.getAttribute("data-figurine");
       if (figurine !== null) return FIGURINES[figurine.toLowerCase()] || figurine || "�";
       if (node.matches(".move-info, .eval, .time, .clock, .glyph")) return "";
       return [...node.childNodes].map(walk).join("");
     }
-    // Live markup pads the text around figurines ("<span data-figurine=B></span> f4 "); whitespace is never part of SAN.
-    return AQ.readSan(walk(el.querySelector(".node-highlight-content") || el).replace(/\s+/g, ""));
+    return AQ.readSan(walk(el.querySelector(".node-highlight-content") || el));
   }
 
   function moves() {
@@ -94,14 +103,17 @@
       const code = [...node.classList].find((c) => /^[wb][pnbrqk]$/.test(c));
       return code && (code[0] === "w" ? code[1].toUpperCase() : code[1]);
     };
-    // Right-click marks are .highlight squares too, told apart only by their colour. Any extra square
-    // that is left makes the pair ambiguous, so the side is then unknown.
-    const highlights = [...el.querySelectorAll(".highlight")].filter((h) => !USER_MARK.test(h.style.backgroundColor));
-    return AQ.scan(el, squareOf, pieceOf, ".piece", highlights);
+    // Right-click marks are .highlight squares too, told apart only by their colour. After dropping the known mark
+    // colours, only exactly two squares of one colour count as the last move; anything else leaves the side unknown.
+    const marks = [...el.querySelectorAll(".highlight")].filter((h) => !USER_MARK.test(h.style.backgroundColor));
+    const pair = new Set(marks.map(squareOf)).size === 2 && new Set(marks.map((h) => h.style.backgroundColor)).size === 1;
+    return AQ.scan(el, squareOf, pieceOf, ".piece", pair ? marks : []);
   }
 
   AQ.adapters.push({
     name: "chess.com",
+    host: "www.chess.com",
+    board: BOARD,
     matches: () => location.hostname === "www.chess.com" && AQ.hasBoard(BOARD),
     gate: () => scope(AQ.shown, pgnText()).gate,
     read() {

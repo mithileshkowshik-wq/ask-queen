@@ -120,5 +120,16 @@ $("custom-remove").addEventListener("click", async () => {
   $("origin").focus();
 });
 
+// --- keyboard shortcut ---
+// This page can read the binding the user actually has, which the panel on a chess page cannot.
+chrome.commands?.getAll().then((all) => {
+  const command = all.find((c) => !c.name.startsWith("_"));
+  if (!command) return;
+  $("keys").hidden = false;
+  $("shortcut").replaceChildren(...(command.shortcut
+    ? [Object.assign(document.createElement("code"), { textContent: command.shortcut }), " opens the Ask Queen panel on a chess page, wherever its button is showing."]
+    : ["No shortcut is set for opening the Ask Queen panel."]));
+}, () => {});
+
 resetConsent();
 render();

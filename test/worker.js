@@ -45,11 +45,12 @@ function virtualClock() {
 }
 
 function worker(plan, settings = {}, givePermission = false) {
-  const clock = virtualClock(), output = [], accesses = [], grants = [];
+  const clock = virtualClock(), output = [], accesses = [], grants = [], tabMessages = [];
   const runtime = { id: "test-extension", onInstalled: event(), onConnect: event(), onMessage: event(), openOptionsPage() {} };
   const storage = { setAccessLevel: async (level) => accesses.push(level.accessLevel),
     get: async () => ({ ...settings }), set: async (value) => Object.assign(settings, value) };
   const chrome = { runtime, storage: { local: storage, onChanged: event() }, action: { onClicked: event() },
+    commands: { onCommand: event() }, tabs: { sendMessage: async (id, msg) => { tabMessages.push([id, msg]); } },
     permissions: { contains: async ({ origins }) => { grants.push(...origins); return givePermission; } } };
   const sender = { id: runtime.id, frameId: 0, url: "https://lichess.org/analysis", tab: { id: 1 } };
   const h = vm.createContext({ ...clock.globals, chrome, AbortController, TextDecoder, Uint8Array, crypto: webcrypto,
@@ -62,7 +63,7 @@ function worker(plan, settings = {}, givePermission = false) {
     },
   });
   vm.runInContext(scripts.background, h);
-  return { clock, output, accesses, grants, chrome,
+  return { clock, output, accesses, grants, chrome, tabMessages,
     open(req, client = {}) {
       const responses = [];
       const port = { name: "queen", sender: { ...sender, ...client }, onMessage: event(), onDisconnect: event(),
@@ -120,6 +121,66 @@ function runWorkerTests(test) {
     await w.clock.advance(0);
     assert(p.last.result);
     assert.equal(JSON.parse(w.output[0].init.body).data[1], F.OPENING.join(" "));
+  });
+  test("Worker opens the tab's panel on the Alt+Q command and ignores other commands", async () => {
+    const w = worker(normal);
+    w.chrome.commands.onCommand.emit("open-panel", { id: 7 });
+    w.chrome.commands.onCommand.emit("something-else", { id: 7 });
+    w.chrome.commands.onCommand.emit("open-panel", undefined);
+    assert.deepEqual(JSON.parse(JSON.stringify(w.tabMessages)), [[7, { type: "openPanel" }]]);
+  });
+  test("Worker rejects malformed snapshots and lines that don't replay onto the snapshot, with no fetch", async () => {
+    const w = worker(normal);
+    const bad = [{ ...best, snapshot: "rnbqkbnr" }, { ...best, snapshot: 5 }, { ...best, snapshot: null }, { ...best, snapshot: [] },
+      { ...best, snapshot: { ...best.snapshot, castle: "KQkq" } }, { ...best, snapshot: { ...best.snapshot, castle: 1, ep: "-" } },
+      { ...best, snapshot: { ...best.snapshot, extra: 1 } }, "ask", null, [best],
+      { ...best, moves: "e4 e5 Nf3 Nc6 Bb5" }, { ...best, moves: "e4 e5 Nf3 Nc6 Qh5" },
+      makeRequest("explain", F.START, "e4 e5 Nf3 Nc6", { played: "Bb5", position: F.ITALIAN })];
+    for (const req of bad) assert.equal(w.open(req).last?.error.code, "illegal_position", JSON.stringify(req).slice(0, 120));
+    await w.clock.advance(3000);
+    assert.equal(w.output.length, 0);
+  });
+  test("Worker keys the cache and coalescing on the snapshot's exact rights", async () => {
+    const w = worker(normal);
+    const exact = { ...best, snapshot: { ...best.snapshot, castle: "KQkq", ep: "-" } };
+    const first = w.open(exact);
+    const other = w.open({ ...exact, snapshot: { ...exact.snapshot, castle: "kq" } }, { tab: { id: 2 } });
+    assert.equal(other.last.error.reason, "other_tab", "a different snapshot is not coalesced");
+    await w.clock.advance(0);
+    assert.equal(first.last.result.positionCheck, "ok");
+    const narrower = w.open({ ...exact, snapshot: { ...exact.snapshot, castle: "kq" } });
+    await w.clock.advance(2000);
+    assert.equal(narrower.last.result.cached, false, "an answer checked against other rights is not reused");
+    assert.equal(narrower.last.result.positionCheck, "mismatch");
+  });
+  test("Worker keeps a Retry-After cooldown for every ask and tab, then asks again", async () => {
+    let posts = 0;
+    const w = worker((r) => r.init.method !== "POST" ? normal(r) : ++posts === 1
+      ? new Response("Queue full", { status: 429, headers: { "retry-after": "30" } }) : start());
+    assert.equal((await (async () => { const p = w.open(best); await w.clock.advance(0); return p.last.error; })()).retryAfter, 30);
+    const again = w.open(makeRequest("best", F.START, ""), { tab: { id: 2 } });
+    await w.clock.advance(0);
+    assert.equal(again.last.error.code, "busy");
+    assert(again.last.error.retryAfter > 0 && again.last.error.retryAfter <= 30);
+    assert.equal(posts, 1, "no request while the server rests");
+    await w.clock.advance(31000);
+    const later = w.open(makeRequest("best", F.START, ""));
+    await w.clock.advance(0);
+    assert(later.last.result);
+    assert.equal(posts, 2);
+  });
+  test("Worker lifts a Retry-After cooldown when the settings change (a token for a quota)", async () => {
+    let posts = 0;
+    const w = worker((r) => r.init.method !== "POST" ? normal(r) : ++posts === 1
+      ? new Response("GPU quota exceeded", { status: 429, headers: { "retry-after": "600" } }) : start());
+    const first = w.open(best);
+    await w.clock.advance(0);
+    assert.equal(first.last.error.code, "quota");
+    w.chrome.storage.onChanged.emit({ token: { newValue: "hf_newToken1234567890" } }, "local");
+    const retry = w.open(best);
+    await w.clock.advance(2000);
+    assert(retry.last.result);
+    assert.equal(posts, 2);
   });
   test("Worker validates the sender and disallows non-top-frame or invalid ask messages", async () => {
     const w = worker(normal);

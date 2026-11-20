@@ -55,6 +55,7 @@ async function launchedSmoke(extension, temp) {
     const sw = await worker(ctx);
     const manifest = await sw.evaluate(() => chrome.runtime.getManifest());
     assert.equal(manifest.version, "1.0.0");
+    assert.equal(await sw.evaluate(() => chrome.i18n.getMessage("extName")), "Ask Queen", "the zip's _locales/en loads");
     const page = await ctx.newPage();
     await page.goto(new URL("options.html", sw.url()).href);
     assert.match(await page.title(), /Ask Queen/i);
@@ -267,16 +268,6 @@ async function runBrowser(extension, temp, out, test, packaged) {
           if (stateFor[id]) await shot(page, stateFor[id]);
           if (e.fen) {
             await clickAsk(ui, e);
-            if (e.mismatch) {
-              // The line widened the page's exact castling rights: no answer, and "Work from the pieces" sends fen6.
-              await code(ui, "mismatch");
-              await shot(page, "error-rights-mismatch");
-              await ui("error-action").click();
-              await ui("best").click();
-              await output(ui, "result");
-              assert.deepEqual(posts(since).map((r) => r.body.data.slice(0, 2)), [[e.fen, e.moves], [e.exact, ""]]);
-              return;
-            }
             await output(ui, "result");
             assert.deepEqual(posts(since).map((r) => r.body.data.slice(0, 2)), [[e.fen, e.moves]]);
             if (id === "lichess-recorded") {
@@ -324,6 +315,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
       ["prose", "best", "result-from-text", /Queen plays 3\.\.\.Be7/],
       ["unclear", "best", "result-no-clear-move", /didn't name a clear move/],
       ["truncated", "best", "result-truncated", /didn't name a clear move/],
+      ["promising", "best", "result-promising", /didn't name a clear move/],
     ];
     for (const [plan, ask, name, title] of resultPlans) {
       await test("Browser " + name, async () => {
@@ -334,6 +326,11 @@ async function runBrowser(extension, temp, out, test, packaged) {
           await output(ui, "result");
           assert.match(await ui("headline").textContent(), title);
           if (plan === "prose") assert(await ui("from-text").isVisible());
+          if (plan === "promising") {
+            assert.match(await ui("suggestion").textContent(), /3\.\.\.Be7 \(unverified\)/);
+            assert.equal(await ui("verdict").count(), 0);
+            assert.doesNotMatch(await ui("out").textContent(), /\bd5\b.*Queen|Queen plays/);
+          }
           if (plan === "truncated") {
             assert.match(await ui("suggestion").textContent(), /3\.\.\.Be7 \(unverified\)/);
             for (const id of ["verdict", "eval", "line"]) assert.equal(await ui(id).count(), 0);
@@ -367,9 +364,66 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await ui("stale").waitFor();
         assert.match(await ui("stale").textContent(), /board has moved/i);
         await shot(page, "result-stale");
+        // Result order: the analysed position, then the headline, then the stale note and its one action.
+        assert.deepEqual(await ui("out").evaluate((out) => ["aq-context", "aq-headline", "aq-stale"].map((id) =>
+          [...out.querySelectorAll("[data-testid]")].findIndex((el) => el.dataset.testid === id))
+          .every((at, i, all) => at >= 0 && (!i || at > all[i - 1]))), true);
         await ui("stale-reask").click();
         await output(ui, "result");
         assert.deepEqual(posts(since)[1]?.body.data.slice(0, 2), [START, ""]);
+      });
+    });
+
+    await test("Browser stale Best result whose new position only allows Explain re-asks with Explain", async () => {
+      const { since } = await setup();
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").click();
+        await ui("best").click();
+        await output(ui, "result");
+        await navigate(page, "lichess-mate");
+        await ui("stale").waitFor();
+        assert.match(await ui("stale-reask").textContent(), /Explain 2\.\.\.Qh4#/);
+        await ui("stale-reask").click();
+        await output(ui, "result");
+        assert.deepEqual(posts(since)[1]?.body.data.slice(0, 2), [START, "f3 e5 g4"]);
+        await shot(page, "result-stale-explain");
+      });
+    });
+
+    await test("Browser Alt+Q command message opens the panel, and the shortcut is shown", async () => {
+      await setup();
+      await withPage("lichess-analysis", async (page, ui) => {
+        await ui("launcher").waitFor();
+        await page.bringToFront();
+        // The command handler's own call, made from the worker the way onCommand makes it.
+        await (await worker(ctx)).evaluate(async () => {
+          const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+          await chrome.tabs.sendMessage(tab.id, { type: "openPanel" });
+        });
+        await ui("panel").waitFor();
+        assert.match(await ui("shortcut").textContent(), /Alt\+Q/);
+      });
+    });
+
+    await test("Browser closed-panel idle cost stays under 1 ms per second", async () => {
+      await setup();
+      await withPage("chesscom-live-markup", async (page, ui) => {
+        await ui("launcher").waitFor();
+        const cdp = await ctx.newCDPSession(page);
+        await cdp.send("Performance.enable");
+        const script = async () => (await cdp.send("Performance.getMetrics")).metrics.find((m) => m.name === "ScriptDuration").value;
+        const before = await script(), seconds = 10;
+        await sleep(seconds * 1000);
+        const perSecond = (await script() - before) * 1000 / seconds;
+        const gate = await isolated(page, () => {
+          const t0 = performance.now();
+          for (let i = 0; i < 1000; i++) AQ.gate();
+          return (performance.now() - t0) / 1000;
+        });
+        const result = { page: "chesscom-live-markup", seconds, scriptMsPerSecond: +perSecond.toFixed(3), gateCallMs: +gate.toFixed(4) };
+        fs.writeFileSync(path.join(out, "perf.json"), JSON.stringify(result, null, 2) + "\n");
+        await cdp.detach();
+        assert(perSecond < 1, JSON.stringify(result));
       });
     });
 
@@ -667,6 +721,41 @@ async function runBrowser(extension, temp, out, test, packaged) {
       }
       return problems;
     }, host);
+    // True 200% zoom: a 1280×800 window at device scale 2 lays out as 640×400 CSS px, like Chrome's 200% zoom.
+    await test("Browser 200% zoom: panel and options fit, keep 24 px targets and work by keyboard", async () => {
+      await setup();
+      const zoom = async (page) => {
+        const cdp = await ctx.newCDPSession(page);
+        await cdp.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 400, deviceScaleFactor: 2, mobile: false });
+        return cdp;
+      };
+      await withPage("lichess-analysis", async (page, ui) => {
+        const cdp = await zoom(page);
+        assert.equal(await page.evaluate(() => devicePixelRatio), 2);
+        await ui("launcher").waitFor();
+        await ui("launcher").focus();
+        await page.keyboard.press("Enter");
+        await ui("explain").waitFor();
+        assert.deepEqual(await layoutProblems(page, selectors.host), [], "panel at 200%");
+        for (let i = 0; i < 30 && !await ui("best").evaluate((el) => el.getRootNode().activeElement === el); i++) await page.keyboard.press("Tab");
+        await page.keyboard.press("Enter");
+        await output(ui, "result");
+        assert.deepEqual(await layoutProblems(page, selectors.host), [], "result at 200%");
+        await shot(page, "zoom200-result");
+        await cdp.detach();
+      });
+      const page = await ctx.newPage();
+      try {
+        const cdp = await zoom(page);
+        await page.goto(new URL("options.html", (await worker(ctx)).url()).href);
+        assert.deepEqual(await layoutProblems(page, null), [], "options at 200%");
+        await page.keyboard.press("Tab");
+        assert.notEqual(await page.evaluate(() => document.activeElement?.localName), "body", "keyboard focus enters the options page");
+        await page.screenshot({ path: path.join(out, "zoom200-options.png"), fullPage: true });
+        await cdp.detach();
+      } finally { await page.close(); }
+    });
+
     for (const viewport of [{ width: 320, height: 568 }, { width: 640, height: 400 }]) {
       const size = viewport.width + "x" + viewport.height;
       await test("Browser panel and options fit " + size + " with 24 px targets", async () => {

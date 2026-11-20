@@ -178,6 +178,86 @@
     });
   }
 
+  // Is `sq` attacked by side `by`? Knights, kings, pawns, then sliding pieces stopped by the first blocker.
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  function attacked(map, sq, by) {
+    const x = FILES.indexOf(sq[0]), y = +sq[1];
+    const at = (dx, dy) => FILES[x + dx] && y + dy >= 1 && y + dy <= 8 ? map[FILES[x + dx] + (y + dy)] : undefined;
+    const is = (p, types) => !!p && colorOf(p) === by && types.includes(p.toUpperCase());
+    if ([[1, 2], [2, 1], [-1, 2], [-2, 1], [1, -2], [2, -1], [-1, -2], [-2, -1]].some(([dx, dy]) => is(at(dx, dy), "N")) ||
+        DIRS.some(([dx, dy]) => is(at(dx, dy), "K")) || [-1, 1].some((dx) => is(at(dx, by === "w" ? -1 : 1), "P"))) return true;
+    return DIRS.some(([dx, dy]) => {
+      for (let i = 1; i < 8; i++) {
+        const p = at(dx * i, dy * i);
+        if (p) return is(p, dx && dy ? "QB" : "QR");
+        if (!FILES[x + dx * i] || y + dy * i < 1 || y + dy * i > 8) return false;
+      }
+      return false;
+    });
+  }
+  const kingOf = (map, side) => Object.keys(map).find((sq) => map[sq] === colored("K", side));
+  const safe = (map, side) => !attacked(map, kingOf(map, side), opposite(side));
+
+  // Full SAN replay from a root FEN to a six-field FEN, or null if any move is not legal there. SAN disambiguation
+  // is resolved by legality (the mover's king may not be left in check); castling needs the right, empty squares and
+  // no attacked king squares. Rights drop on king and rook moves and on rook captures; en passant is written only
+  // when a legal capture exists (as python-chess and lichess do). Check and mate marks are not verified.
+  function replay(rootFen, sans) {
+    const root = parseFen(rootFen);
+    if (!root || !Array.isArray(sans) || !isPlausibleBoard(root.placement).ok) return null;
+    let { placement: map, side, castle, ep, half, full } = root;
+    castle = castle.replace("-", "");
+    for (const san of sans) {
+      const m = sanParts(san, side), them = opposite(side);
+      if (!m) return null;
+      let next, from;
+      if (m.rookFrom) {
+        const between = m.rookFrom[0] === "h" ? "fg" : "bcd";
+        if (!castle.includes(colored(m.rookFrom[0] === "h" ? "K" : "Q", side)) || map[m.from] !== colored("K", side) ||
+            map[m.rookFrom] !== colored("R", side) || [...between].some((f) => map[f + m.to[1]]) ||
+            [m.from, m.rookTo, m.to].some((sq) => attacked(map, sq, them))) return null;
+        next = { ...map, [m.to]: map[m.from], [m.rookTo]: map[m.rookFrom] };
+        delete next[m.from];
+        delete next[m.rookFrom];
+        from = m.from;
+      } else {
+        const target = map[m.to];
+        const enPassant = m.piece === "P" && m.capture && !target && m.to === ep;
+        if (m.capture !== !!(target || enPassant) || (target && (colorOf(target) === side || target.toUpperCase() === "K")) ||
+            (m.piece === "P" && !!m.promotion !== (m.to[1] === (side === "w" ? "8" : "1")))) return null;
+        const options = Object.keys(map).filter((sq) => map[sq] === colored(m.piece, side) && (!m.file || sq[0] === m.file) &&
+          (!m.rank || sq[1] === m.rank) && reachable(m.piece, sq, m.to, map, side, m.capture)).map((sq) => {
+          const after = { ...map, [m.to]: colored(m.promotion || m.piece, side) };
+          delete after[sq];
+          if (enPassant) delete after[m.to[0] + sq[1]];
+          return [sq, after];
+        }).filter(([, after]) => safe(after, side));
+        if (options.length !== 1) return null;
+        [from, next] = options[0];
+      }
+      for (const [sq, rights] of [["e1", "KQ"], ["e8", "kq"], ["a1", "Q"], ["h1", "K"], ["a8", "q"], ["h8", "k"]])
+        if (from === sq || m.to === sq) castle = castle.replace(new RegExp(`[${rights}]`, "g"), "");
+      ep = "-";
+      if (m.piece === "P" && Math.abs(m.to[1] - from[1]) === 2) {
+        const square = m.to[0] + (side === "w" ? "3" : "6");
+        const capture = [-1, 1].map((dx) => FILES[FILES.indexOf(m.to[0]) + dx] && FILES[FILES.indexOf(m.to[0]) + dx] + m.to[1])
+          .some((sq) => {
+            if (!sq || next[sq] !== colored("P", them)) return false;
+            const after = { ...next, [square]: next[sq] };
+            delete after[sq];
+            delete after[m.to];
+            return safe(after, them);
+          });
+        if (capture) ep = square;
+      }
+      half = m.piece === "P" || m.capture ? 0 : half + 1;
+      if (side === "b") full++;
+      map = next;
+      side = them;
+    }
+    return [placementToString(map), side, castle || "-", ep, half, full].join(" ");
+  }
+
   function moveLabel(san, rootFen, plyIndex) {
     const root = parseFen(rootFen);
     if (!root || !Number.isSafeInteger(plyIndex) || plyIndex < 0) return san;
@@ -186,5 +266,5 @@
   }
 
   globalThis.AQChess = { START_FEN, parseFen, placementToString, isStrictSan, stripSan, sameMove,
-    isPlausibleBoard, preSendCheck, verifyBest, verifyExplain, sanMatchesUci, moveLabel };
+    isPlausibleBoard, preSendCheck, verifyBest, verifyExplain, sanMatchesUci, moveLabel, replay };
 })();

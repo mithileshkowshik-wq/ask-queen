@@ -67,7 +67,8 @@ Confirmed by: ____________________ Date: ____________________
 
 ## 7. Sign the live check
 
-- [ ] Open `docs/live-checklist.md`. The chess.com check from 2026-11-19 is transcribed there from chat and marked
-      "owner signature pending".
-- [ ] Repeat the check on the release build (1.0.0), fill in the row, and sign it. The live chess.com check is
-      mandatory. A live lichess check is optional.
+- [x] Live chess.com check on the release build. Done: `docs/live-checklist.md` holds the owner-signed record for
+      build 1.0.0 (Game Review, Explain 15.Nf3, 2026-11-19).
+- [ ] If the position-reading code for chess.com changes again before upload, repeat the check on that build and add
+      a new signed record. The earlier records stay as they are.
+- [ ] Optional: a live lichess check (analysis board, a study, and a finished game), recorded the same way.

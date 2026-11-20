@@ -34,7 +34,7 @@ WHERE IT WORKS
 • If the move list can't be read, it reads the pieces and asks you whose move it is.
 
 FAIR PLAY
-Ask Queen is for games that are over. It does not appear during games in progress (live, daily or correspondence, playing or watching) or on puzzles. Using outside help during a game is against both sites' rules.
+Ask Queen is for games that are over. It does not appear during games in progress (live, daily or correspondence, playing or watching) or on puzzles. It can't stop someone copying a position into another analysis tool by hand; using outside help during a game is against both sites' rules, and that is on the player.
 
 LIMITS, STATED PLAINLY
 • Answers can be wrong. Queen is a language model, not an engine. Check anything important with an engine.

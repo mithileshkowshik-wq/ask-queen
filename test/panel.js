@@ -86,8 +86,7 @@ function runPanelTests(test) {
           assert(bg.validAsk(s.calls[0]));
           const answer = bg.normalized([{ fen: e.replyFen, analysis: "Develop.", best_move_san: null }],
             "boneyland", s.calls[0], "boneyland", 1);
-          // With an exact FEN on the page the panel sends its rights, and a line that widens them is a mismatch.
-          assert.equal(answer.positionCheck, e.mismatch ? "mismatch" : "ok");
+          assert.equal(answer.positionCheck, "ok");
           s.events.message({ result: answer });
           assert(s.element("headline"));
         }
@@ -133,7 +132,8 @@ function runPanelTests(test) {
     } finally { await s.close(); }
   });
   test("Mutation sanity: disabling escaping in the shipped renderer fails the hostile-result assertion", async () => {
-    const s = await panelFixture("lichess-analysis", { mutate: (source) => source.replace(/^  const esc = .*;$/m, "  const esc = (text) => text;") });
+    const s = await panelFixture("lichess-analysis", { mutate: (source) => source.replace("const text = (s) => document.createTextNode(s);",
+      'const text = (s) => { const t = document.createElement("template"); t.innerHTML = s; return t.content; };') });
     try {
       await s.open();
       s.click("best");
@@ -154,7 +154,7 @@ function runPanelTests(test) {
       replace("lichess-start");
       s.click("best");
       assert.equal(s.calls.length, 1);
-      assert.match(s.element("changed").textContent, /board changed/i);
+      assert.match(s.element("changed").textContent, /board (?:changed|has moved)/i);
       assert(!s.element("stale").hidden);
       s.click("stale-reask");
       assert.equal(s.calls.length, 2);
@@ -175,6 +175,32 @@ function runPanelTests(test) {
       assert.equal(s.disconnected, 1);
       assert.deepEqual(s.calls.map((c) => c.played), ["Nf3", "Bc4"]);
       assert.equal(s.calls[1].moves, "e4 e5");
+    } finally { await s.close(); }
+  });
+  test("Live regions exist and are empty before any text is written into them", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      await s.open();
+      for (const id of ["status", "live"]) {
+        assert.equal(s.element(id).getAttribute("role"), "status", id);
+        assert.equal(s.element(id).textContent.trim(), "", id);
+      }
+      const region = s.element("status");
+      s.click("best");
+      assert.equal(s.element("status"), region, "the same node gets the thinking text");
+      assert.match(region.textContent, /\S/);
+      s.events.message({ result });
+      assert.equal(s.element("status"), region, "and then the headline");
+      assert(region.contains(s.element("headline")));
+    } finally { await s.close(); }
+  });
+  test("Another tab's ask shows its own copy, not the busy-server copy", async () => {
+    const s = await panelFixture("lichess-analysis");
+    try {
+      await s.open();
+      s.click("best");
+      s.events.message({ error: { code: "busy", detail: "Another tab is already asking Queen.", reason: "other_tab" } });
+      assert.match(s.element("error").textContent, /Another tab is already asking Queen/);
     } finally { await s.close(); }
   });
   test("Open panel disconnects in-flight asks on puzzle, variant and in-progress route changes", async () => {

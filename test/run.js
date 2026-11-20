@@ -49,7 +49,15 @@ async function staticTests(temp) {
     assert.equal("web_accessible_resources" in manifest, false);
     assert.equal("externally_connectable" in manifest, false);
     assert.deepEqual(Object.keys(manifest.icons), ["16", "32", "48", "128"]);
-    assert(manifest.description.length <= 132);
+    // Name and description come from _locales/en; the open-panel command needs no extra permission.
+    const messages = require("../_locales/en/messages.json");
+    assert.equal(manifest.default_locale, "en");
+    assert.equal(manifest.name, "__MSG_extName__");
+    assert.equal(messages.extName.message, "Ask Queen");
+    assert.equal(manifest.description, "__MSG_extDescription__");
+    assert(messages.extDescription.message.length <= 132);
+    assert.doesNotMatch(messages.extDescription.message, /\b(?:best|official|#1|ultimate)\b/i);
+    assert.deepEqual(manifest.commands, { "open-panel": { suggested_key: { default: "Alt+Q" }, description: "__MSG_openPanel__" } });
   });
   await test("Shipped JavaScript parses with no dynamic code execution", () => {
     for (const file of [manifest.background.service_worker, ...manifest.content_scripts.flatMap((c) => c.js), "options.js"]) {

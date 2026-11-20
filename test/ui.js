@@ -3,7 +3,7 @@ const selectors = Object.fromEntries([
   "host", "launcher", "panel", "notice", "notice-ok", "ask", "out", "dock", "close", "gate", "gate-close", "best",
   "explain", "side", "side-white", "side-black", "side-switch", "disagree", "game-over", "changed", "cancel",
   "wait", "headline", "analysis", "verdict", "from-text", "truncated", "suggestion", "other-server", "eval", "line",
-  "result-footer", "stale", "stale-reask", "error", "error-details", "error-action", "ask-again",
+  "result-footer", "stale", "stale-reask", "error", "error-details", "error-action", "ask-again", "status", "live", "reading", "shortcut",
 ].map((name) => [name, `[data-testid="aq-${name}"]`]));
 
 const rootFor = (document) => document.querySelector(selectors.host)?.shadowRoot;

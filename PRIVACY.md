@@ -76,16 +76,26 @@ Stored in Chrome's local extension storage, in this browser profile only, never 
 | Whether you have seen the first-use notice | So it is shown once. |
 | Which side the panel is docked on | So it stays where you put it. |
 
-The token can be read only by the extension's own background and Settings pages. The extension's scripts that run
-inside chess.com and lichess.org cannot read it, and neither can those sites. Settings shows a saved token only by its
-last four characters. The token is never logged. **Remove token** in Settings deletes it, and removing the extension
-deletes everything above.
+Only the extension's own background and Settings pages can read the token from this storage. The extension's scripts
+that run inside chess.com and lichess.org cannot, and neither can those sites. Settings shows a saved token only by
+its last four characters. The token is never logged. A server that receives your token could repeat it in its answer,
+so the background removes any copy of the token it finds in an answer, and any text shaped like a Hugging Face token,
+before the answer reaches the page. **Remove token** in Settings deletes the token, and removing the extension deletes
+everything above.
 
 ## Answers kept in memory
 
-To avoid asking a free server the same thing twice, the extension keeps up to 32 recent answers in memory for up to
-15 minutes. They are never written to disk. They are cleared when you change the token or server settings, and when
-Chrome stops the extension's background process or closes. **Ask again** always skips this cache.
+To avoid asking a free server the same thing twice, the extension keeps recent answers in the memory of its
+background process. They are never written to disk. Exactly what happens to them:
+
+- An answer is reused only for 15 minutes after it arrived.
+- At most 32 answers are held. When a 33rd arrives, the oldest is dropped.
+- An answer older than 15 minutes is not removed by a timer. It is dropped the next time the same question is asked,
+  or when newer answers push it out. Until then it stays in memory, unused.
+- All answers are dropped when you change the token or server settings, and when Chrome unloads the extension's
+  background process, which it does on its own after a period of inactivity and when the browser closes.
+
+**Ask again** always skips this cache.
 
 ## What the extension reads on the page
 
@@ -93,7 +103,9 @@ On chess.com and lichess.org, the extension reads the board and the move list to
 This happens in your browser. It leaves your browser only as the position and moves described above, and only when
 you click.
 
-The extension shows nothing and sends nothing on games in progress, puzzles and chess variants.
+On games in progress, puzzles and chess variants the extension's button is hidden and nothing is sent. If you reach
+such a page with the panel already open, the question in flight is cancelled, any answer is removed, and the panel
+shows one short message saying why (for example "Available after the game ends"), with Close as its only button.
 
 ## What the extension never does
 

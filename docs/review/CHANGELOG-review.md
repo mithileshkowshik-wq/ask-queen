@@ -63,7 +63,7 @@ Done by Opus 5.5. Each line gives the fix and the test that guards it; every tes
   - Guarded by: `Adapter/Panel/Browser fixture {lichess,chesscom}-animation` (the moving piece is a real one), `A moving piece keeps the board unreadable until it lands`.
 - **H1b, chess.com custom roots** (`content/chesscom.js`). A share-panel PGN `[FEN]` is used as the root, and `[SetUp]` without a FEN blocks replay. `data-whole-move-number` on the first row is a custom-start sign.
   - Guarded by: `Adapter/Browser fixture chesscom-tagged-root` (root plus prior moves), `chesscom-row-number`, `lichess-custom-line` (custom root with a prior move on lichess).
-- **H7, provider-specific legality** (`background.js` `normalized`). A prose move is confirmed only by `critical_line_uci[0]` on boneyland, or by `critical_line.legal_steps[0].uci` on hugging-apps when it is a real object. The recording has a repr string there, so hugging-apps prose stays unverified.
+- **H7, provider-specific legality** (`background.js` `normalized`). A prose move is confirmed only by `critical_line_uci[0]` on boneyland, or by `critical_line.legal_steps[0].uci` on hugging-apps when it is a real object. (Corrected in fix pass 3: the recording's `critical_line` is an object with `legal_steps`, so hugging-apps prose can be confirmed. Only a repr string, or a field from the other provider's shape, stays unverified.)
   - Guarded by: `Prose is confirmed only by the answering provider's own legality field`.
 - **Real boneyland recording** (`test/fixtures/boneyland-success.sse`). `evaluation` is the model's sentence, so it is used as `evaluationText` and no sign is parsed. Numbers remain a fallback. "4. Nxe5" becomes "4.Nxe5" in prose and in the critical line, and the BEST_MOVE/CRITICAL_LINE/EVALUATION lines are dropped from the prose. The mock serves the recording for its own position.
   - Guarded by: `The real boneyland recording normalizes with its evaluation sentence and a numbered line`, `Browser fixture lichess-recorded` (exact Evaluation row, screenshot `result-evaluation.png`).
@@ -92,3 +92,60 @@ Done by Opus 5.5. Each line gives the fix and the test that guards it; every tes
 - **Problem.** The owner's live check of 1.0.0 on chess.com Game Review (2026-11-19) found that the board was read correctly, but the move list was never used, so only Best move was offered. The owner captured the real markup: `<span data-figurine="B"></span> f4 ` puts spaces around the move text. The rebuilt SAN was therefore "B f4", which strict SAN correctly rejects, discarding the whole list.
 - **Fix.** `content/chesscom.js` removes whitespace when rebuilding SAN, because whitespace is never part of SAN. The move-list selector also accepts the live `.move-list-row .node` structure.
 - **Guarded by:** `Adapter|Panel|Browser fixture chesscom-live-markup` and `…-live-markup-black`. These fixtures reproduce the captured markup verbatim: `data-whole-move-number` rows, padded figurine text, `offset-for-annotation-icon`, and timestamp cells. Both return `null` (falling back to the board) without the fix.
+
+## Fix pass 3, logic (after round 3: GPT-6.2-sol 4.0, Fable 5.2 7.0)
+Done by Opus 5.5. Each entry gives the fix and the test that guards it; every name is a test in `docs/review/evidence/round-dev/report.json`.
+
+- **Root cause of the castling, rights and placement findings (GPT H1, Fable H1b): full SAN replay** (`content/chess.js` `replay`). It is a legal-move replay. Disambiguation is resolved by "the mover's king is not left in check". It handles castling (right, empty path, no attacked king squares), en passant, promotion, rights lost on king and rook moves and on rook captures, en passant written only when a legal capture exists, and the clocks.
+  - **Before sending** (`content/common.js` `AQ.position`): the replay must rebuild the scanned board, and must match the exact site FEN's side, castling and en passant. Otherwise the list is dropped and the "disagree" state shows. `lichess-rights-mismatch` is now a disagree fixture: the only POST is the exact FEN, never the line.
+  - **In the background:**
+    - `validAsk` rejects any ask whose line, plus the played move for Explain, does not replay onto the snapshot. It answers `illegal_position` and makes no fetch.
+    - The returned FEN must equal the replayed position, including castling and en passant.
+  - Guarded by:
+    - `Full SAN replay: legal moves, disambiguation by pins, castling, en passant, promotion, rights and clocks`
+    - `Adapters drop a move list whose replay doesn't match the exact FEN's castling or en passant`
+    - `Background checks the returned FEN against the replayed line, rights and en passant included`
+    - `Worker rejects malformed snapshots and lines that don't replay onto the snapshot, with no fetch`
+    - `Adapter/Panel/Browser fixture lichess-rights-mismatch`
+    - every sending fixture (each now passes the replay)
+- **lichess custom starts and variants** (`content/lichess.js`).
+  - `variant-fromPosition` on `main.analyse` or `.round__app`, and the game-meta "From position" text, are custom-start signs, so the board fallback is used unless a PGN `[FEN]` root exists.
+  - Any other `variant-<key>` except `standard` is gated, studies included.
+  - Black-first column trees (`<index>1</index><move class="empty">`) and inline numbers (`<move><index>3.</index>…`) are custom-start signs.
+  - Finished games in the analysis view are recognised by `.analyse__moves .result`.
+  - The PGN is read from lila's `div.pgn` text.
+  - Fixtures are rebuilt from lila markup: `lichess-finished`, `lichess-study`, `lichess-frompos-round`, `lichess-frompos-analysis`, `lichess-study-960`, `lichess-study-crazyhouse`, `lichess-inline-custom`, `lichess-column-black-first`.
+  - Guarded by: the matching `Adapter/Panel/Browser fixture …` tests.
+- **chess.com finished evidence scoped to the game (GPT H6, Fable 4)** (`content/chesscom.js` `scope`).
+  - PGN is read only from the share panel's read-only textarea or a `data-pgn` on the board or its layout.
+  - A result token counts only inside the move list; a game-over element counts only inside the main board layout.
+  - A running clock (`.clock-player-turn`, `.clock-running`) always gates.
+  - Fixtures: `chesscom-live-notes-result`, `chesscom-live-sidebar-result`, `chesscom-live-tab-review-sidebar`, `chesscom-live-clock-and-result`. Each runs direct and as a Browser fixture, with zero POSTs.
+- **chess.com SAN and highlights (GPT major).**
+  - Each text node is trimmed and then joined, so the live padding around figurines still reads (`chesscom-live-markup`, `chesscom-live-markup-black`), but `e 4` inside one node fails (`chesscom-inner-space`).
+  - A side is read only from exactly two highlight squares of one colour, after dropping the mark colours in rgb() and rgba() form (`chesscom-marks-only`, `chesscom-mixed-highlights`, `chesscom-user-marked`).
+- **Token (GPT H3, Fable 8)** (`background.js` `invisible`, `scrub`, `guard`).
+  - `\p{Cf}` and U+00AD are stripped from every provider string first.
+  - The saved token is matched across whitespace, newlines and Markdown marks.
+  - A final check spells the displayed fields with only letters and digits, both alone and joined. A field that leaks is replaced with "[redacted]"; a leak split across fields clears them all.
+  - Guarded by: `Token redaction also catches paragraph, cross-field and invisible-character splits`, plus the pass-2 echo tests.
+- **Background.**
+  - **Snapshot shape (GPT major).** Primitive, array and null snapshots, unknown keys, and wrongly typed rights are rejected cleanly. Guarded by: `Worker rejects malformed snapshots …`.
+  - **Keys include rights (Fable 10).** The cache and coalescing keys include `snapshot.castle`/`ep`. Guarded by: `Worker keys the cache and coalescing on the snapshot's exact rights`.
+  - **Retry-After cooldown for every ask and tab (GPT C2).** The longest `Retry-After` is kept after a fallback. A settings change, such as adding a token for a quota, lifts the cooldown: `Worker lifts a Retry-After cooldown when the settings change (a token for a quota)`. Guarded by: `Worker keeps a Retry-After cooldown for every ask and tab, then asks again`.
+  - **Evaluation rows (Fable 3, GPT C3).** hugging-apps' EVALUATION line is extracted before the structured lines are dropped, and player/opponent is mapped. A sentence that names no side is dropped, and an "equal" one is shown as equal for White and Black. Guarded by: `Evaluation rows: both real recordings name a side, …`.
+  - **hugging-apps prose confirmation (Fable 7).** It is confirmed by the recorded `critical_line.legal_steps` object. Guarded by: `hugging-apps prose is confirmed by its recorded critical_line.legal_steps object`.
+- **Closed-panel cost (GPT C8).** `AQ.gate()` caches its answer and recomputes only on a URL change, a board element change, or a click or key press, so a quiet tick costs one `querySelector`. `AQ.confirm()` is the full read for the moment the gate opens. The contract is in `docs/review/contract.md`, and the measurement is in `docs/perf.md`.
+  - Guarded by: `AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it`, `AQ.gate() is layout-free and agrees with readPosition() on every fixture`, `Browser closed-panel idle cost stays under 1 ms per second` (writes `perf.json`; measured at 0.209 ms per second).
+- **Keyboard shortcut (C4/C5 level 10).** The manifest declares `commands.open-panel` (Alt+Q), and `onCommand` sends `chrome.tabs.sendMessage(tab.id, {type:"openPanel"})`. No new permission is needed.
+  - Guarded by: `Worker opens the tab's panel on the Alt+Q command and ignores other commands`, `Browser Alt+Q command message opens the panel, and the shortcut is shown`.
+- **`_locales/en`.** It holds `extName`, `extDescription` and `openPanel`, with `default_locale: "en"`. It is in the zip.
+  - Guarded by: `Manifest is MV3 …`, `Allowlist zip contains exactly the runtime files …`, `Extracted allowlist zip loads in Chromium` (`chrome.i18n.getMessage("extName")`).
+- **Tests.**
+  - True 200% zoom: `Browser 200% zoom: panel and options fit, keep 24 px targets and work by keyboard`, using CDP device scale 2 at 640×400.
+  - `Browser result-promising` (a `promising_or_analysis` screenshot).
+  - `Browser stale Best result whose new position only allows Explain re-asks with Explain`.
+  - Stale banner order, asserted inside `Browser cache replay and stale result after a cursor change`.
+  - `Live regions exist and are empty before any text is written into them`.
+  - `Another tab's ask shows its own copy, not the busy-server copy`.
+  - The escaping mutation test now targets the DOM renderer's single text sink.

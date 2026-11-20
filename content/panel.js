@@ -1,8 +1,8 @@
 // Ask Queen UI: a launcher and a non-modal panel inside one shadow root, so site CSS can't reach it.
 // Reads the page only through AQ.readPosition() and talks only to the background (docs/review/contract.md).
 (() => {
-  // Keys typed in the panel must not reach the site's shortcuts in either phase. The capture listener on window
-  // is registered before anything else here; the one on the host covers the bubble phase.
+  // Keys typed in the panel must not reach the site's shortcuts in either phase. content/keyguard.js does this from
+  // document_start; these listeners are the same guard for the capture phase (window) and the bubble phase (host).
   const host = document.createElement("div");
   const onKey = (e) => {
     if (!e.composedPath().includes(host)) return;
@@ -54,7 +54,9 @@ h2 { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; fon
 .icon { width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--dim); font-size: 18px; line-height: 1; }
 .icon:hover { border-color: var(--edge); color: var(--ivory); }
 .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 16px; }
-.foot { padding: 8px 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11.5px; }
+.foot { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11.5px; }
+.foot > :first-child { flex: 1; }
+.kbd { padding: 1px 6px; border: 1px solid var(--edge); border-radius: 5px; color: var(--ivory); white-space: nowrap; }
 
 .ask, .slot { display: flex; flex-direction: column; gap: 12px; }
 .out { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -158,47 +160,62 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   const disc = (s) => deco(s === "w" ? "disc w" : "disc");
   const row = (...kids) => h("div", { className: "row" }, ...kids);
 
-  // Markdown subset (headings, lists, bold, italic, code; no links or images). Everything is HTML-escaped
-  // before any tag is added, so the output holds only p, ul, ol, li[value], h4, strong, em and code.
-  const esc = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  const inline = (s) => s
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/g, "$1<em>$2</em>");
-  const md = (text) => {
+  // Markdown subset (headings, lists, bold, italic, code; no links or images), built as DOM nodes. The output
+  // holds only p, ul, ol, li[value], h4, strong, em and code. Model text enters the page through text() and
+  // nowhere else, so nothing in it can become markup: this file has no HTML-parsing sink.
+  const text = (s) => document.createTextNode(s);
+  const inline = (s) => {
+    const m = /`([^`]+)`|\*\*(.+?)\*\*|(^|[^*\w])\*(?!\s)([^*]+?)\*(?!\w)/.exec(s);
+    if (!m) return s ? [text(s)] : [];
+    const [all, code, bold, lead = "", em] = m;
+    const node = code != null ? h("code", {}, text(code)) : bold != null ? h("strong", {}, inline(bold)) : h("em", {}, inline(em));
+    return [text(s.slice(0, m.index) + lead), node, ...inline(s.slice(m.index + all.length))];
+  };
+  const md = (source) => {
     const out = [];
     let block = null; // { tag: "p" | "ul" | "ol", items }
     const flush = () => {
       if (!block) return;
-      out.push(block.tag === "p"
-        ? `<p>${inline(block.items.join(" "))}</p>`
-        : `<${block.tag}>${block.items.map(([n, t]) => `<li${n ? ` value="${n}"` : ""}>${inline(t)}</li>`).join("")}</${block.tag}>`);
+      out.push(block.tag === "p" ? h("p", {}, inline(block.items.join(" ")))
+        : h(block.tag, {}, block.items.map(([n, t]) => {
+          const li = h("li", {}, inline(t));
+          if (n) li.setAttribute("value", n); // the only attribute the renderer writes, always digits
+          return li;
+        })));
       block = null;
     };
     const add = (tag, item) => {
       if (block?.tag !== tag) { flush(); block = { tag, items: [] }; }
       block.items.push(item);
     };
-    for (const raw of esc(String(text).replace(/<\/?(?:PIECE|SQUARE)_[^>\s]*>/g, "")).split(/\r?\n/)) {
+    for (const raw of String(source).replace(/<\/?(?:PIECE|SQUARE)_[^>\s]*>/g, "").split(/\r?\n/)) {
       const line = raw.trim();
       let m;
       if (!line || /^([-*_])\1{2,}$/.test(line)) flush();
-      else if ((m = /^#{1,6}\s+(.+)$/.exec(line))) { flush(); out.push(`<h4>${inline(m[1])}</h4>`); }
+      else if ((m = /^#{1,6}\s+(.+)$/.exec(line))) { flush(); out.push(h("h4", {}, inline(m[1]))); }
       else if ((m = /^(?:\*\*)?([A-Z][A-Z_ ]{2,24}):(?:\*\*)?\s*(.*)$/.exec(line))) {
         flush(); // "ANALYSIS:" -> a small heading; the rest of the line starts a paragraph
         const t = m[1].replace(/_/g, " ").toLowerCase();
-        out.push(`<h4>${t[0].toUpperCase() + t.slice(1)}</h4>`);
+        out.push(h("h4", {}, text(t[0].toUpperCase() + t.slice(1))));
         if (m[2]) add("p", m[2]);
       }
       else if ((m = /^[-*•]\s+(.+)$/.exec(line))) add("ul", [0, m[1]]);
-      else if ((m = /^(\d+)[.)]\s+(.+)$/.exec(line))) add("ol", [m[1], m[2]]); // keeps the number: "14. Bg5" stays 14
+      else if ((m = /^(\d{1,4})[.)]\s+(.+)$/.exec(line))) add("ol", [m[1], m[2]]); // keeps the number: "14. Bg5" stays 14
       else add("p", line);
     }
     flush();
-    return out.join("");
+    return out;
   };
 
   // --- shell ---
+  // The manifest's default shortcut for the "open the panel" command. A content script can't read the user's own
+  // binding, so the hint shows the default; the tooltip and Settings say where to change it.
+  const shortcut = (() => {
+    try {
+      const keys = Object.values(chrome.runtime.getManifest().commands || {}).map((c) => c.suggested_key).find(Boolean);
+      return (/Mac/.test(navigator.platform) && keys?.mac) || keys?.default || "";
+    } catch { return ""; }
+  })();
   host.setAttribute("data-testid", "aq-host");
   const root = host.attachShadow({ mode: "open" });
   const fab = h("button", { tid: "aq-launcher", className: "fab", hidden: true, onclick: openPanel }, deco("glyph", "♛︎"), "Ask Queen");
@@ -206,7 +223,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   // Live regions are persistent and start empty: text written into a region that already exists is announced.
   const statusBox = h("div", { tid: "aq-status", className: "live", role: "status" }); // thinking text, result headline
   const alertBox = h("div", { tid: "aq-error", className: "live", role: "alert" });    // error headline and sentence
-  const live = h("div", { tid: "aq-live", className: "sr", role: "status" });           // gate, "board changed" and stale notes
+  const live = h("div", { tid: "aq-live", className: "sr", role: "status" });           // gate and "board has moved" notes
   const pre = h("div", { className: "slot pre" }), timerSlot = h("div", { className: "timer" }), post = h("div", { className: "slot" });
   const outBox = h("section", { tid: "aq-out", className: "out", hidden: true, tabIndex: -1 },
     pre, h("div", { className: "clock" }, statusBox, timerSlot), alertBox, post);
@@ -217,7 +234,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     h("div", { className: "head" }, h("h2", {}, deco("glyph", "♛︎"), "Ask Queen"), dockBtn, setBtn,
       h("button", { tid: "aq-close", className: "icon", "aria-label": "Close", onclick: closePanel }, deco("", "×"))),
     body,
-    h("div", { tid: "aq-footer", className: "foot", textContent: "Queen is a language model on community servers. Explanations can be wrong." }));
+    h("div", { tid: "aq-footer", className: "foot" }, h("span", { textContent: "Queen is a language model on community servers. Explanations can be wrong." }),
+      shortcut && h("span", { tid: "aq-shortcut", className: "kbd", title: "Opens Ask Queen. Change it at chrome://extensions/shortcuts" },
+        h("span", { className: "sr", textContent: "Keyboard shortcut: " }), shortcut)));
+  if (shortcut) { fab.title = `Ask Queen (${shortcut})`; fab.setAttribute("aria-keyshortcuts", shortcut); }
   try { // a constructed sheet isn't subject to the site's style CSP
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(CSS);
@@ -263,14 +283,21 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
 
   // --- following the page ---
   // Closed: one layout-free AQ.gate() call a second, and only while the tab is visible. The interval is cleared
-  // when the tab is hidden or the panel is open. AQ.readPosition() is never called while the panel is closed.
-  let ticker = 0, prefsReady = null;
+  // when the tab is hidden or the panel is open. A full AQ.readPosition() runs only to confirm the gate when it
+  // flips to open or the address changes (retried after 1, 2, 4, 8 and 16 s while a page is still loading), never
+  // on a steady tick. The launcher shows only when both agree.
+  let ticker = 0, prefsReady = null, confirmed = false, tries = 0, wait = 0, href = "";
+  const unconfirm = () => { confirmed = false; tries = wait = 0; };
   async function showLauncher() {
+    if (document.hidden) return;
     let g = null;
     try { g = AQ.gate(); } catch {}
-    const ok = !!g && g.hasBoard === true && g.gate === null; // anything else fails closed
-    if (ok && !prefs) await (prefsReady ||= loadPrefs());
-    fab.hidden = !ok || !panel.hidden;
+    const open = !!g && g.hasBoard === true && g.gate === null; // anything else fails closed
+    if (!open || href !== location.href) unconfirm();
+    href = location.href;
+    if (open && !confirmed && tries < 6 && --wait <= 0) { confirmed = read()?.gate === null; wait = 2 ** tries++; }
+    if (open && confirmed && !prefs) await (prefsReady ||= loadPrefs());
+    fab.hidden = !(open && confirmed) || !panel.hidden;
   }
   function watch() {
     const on = panel.hidden && !document.hidden;
@@ -279,7 +306,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     else { clearInterval(ticker); ticker = 0; }
   }
   // Open: a debounced MutationObserver, at most 4 reads a second, each within 250 ms of the change.
-  let due = 0, lastRead = 0, moving = 0;
+  let due = 0, lastRead = 0, moving = 0, reading = false; // reading: the board is mid-move
   const watcher = new MutationObserver(schedule);
   function schedule() {
     if (due || document.hidden || panel.hidden) return;
@@ -287,11 +314,13 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       due = 0;
       lastRead = Date.now();
       if (panel.hidden) return;
-      const p = read();
-      // Mid-animation the adapter reports an unreadable board. Keep the view and look again, for up to a second.
-      if (p?.gate === null && location.pathname === path && p.board?.reason === "The board is moving" && moving++ < 4) return schedule();
+      const p = read(), was = reading;
+      // Mid-move the adapter reports an unreadable board. Say "Reading the board…" at once, keep the last view,
+      // and look again; after about a second of that, show the board as unreadable.
+      reading = p?.gate === null && location.pathname === path && p.board?.reason === "The board is moving" && moving++ < 4;
+      if (reading) { if (!was) render(); return schedule(); }
       moving = 0;
-      sync(p);
+      if (was && key(p) === key(pos)) render(); else sync(p);
     }, Math.max(100, 250 - (Date.now() - lastRead)));
   }
   function sync(p = read(), why = "") {
@@ -305,6 +334,19 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   }
   document.addEventListener("visibilitychange", () => { watch(); if (!document.hidden) panel.hidden ? showLauncher() : schedule(); });
   fab.addEventListener("focus", (e) => { prevFocus = e.relatedTarget; });
+  // The keyboard shortcut reaches this tab from the background. It opens the panel only where the launcher would
+  // show, and puts focus on the primary action.
+  chrome.runtime.onMessage?.addListener((m, sender) => {
+    if (m?.type !== "openPanel" || sender?.id !== chrome.runtime.id) return;
+    (async () => {
+      if (panel.hidden) {
+        if (document.hidden || read()?.gate !== null) return;
+        if (!host.contains(document.activeElement)) prevFocus = document.activeElement;
+        await openPanel();
+      }
+      (askBox.querySelector(".btn.primary:not(:disabled)") || panel).focus();
+    })();
+  });
   watch();
   showLauncher();
 
@@ -313,8 +355,9 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     if (!prefs) await loadPrefs();
     pos = read();
     side = pos?.board?.side ?? null;
-    useBoard = false;
+    useBoard = reading = false;
     note = "";
+    moving = 0;
     panel.hidden = false;
     watch();
     render();
@@ -328,6 +371,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     root.activeElement?.blur();
     panel.hidden = true;
     watch();
+    unconfirm(); // the page may have changed while the panel was open
     await showLauncher();
     // Focus order: the launcher, else what had focus before the panel opened, else the page body.
     if (!fab.hidden) fab.focus();
@@ -401,7 +445,8 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     return {
       label: `Best move for ${NAME[side]}`,
       msg: { mode, fen, moves: "", played: null, snapshot: snap(b, side, fen) },
-      ctx: { mode, played: null, fromMoves: false, who: side, lab: (san) => C.moveLabel(san, fen, 0), what: "Position on the board" },
+      // A scanned board has placeholder clocks ("0 1"), so its moves are shown without invented move numbers.
+      ctx: { mode, played: null, fromMoves: false, who: side, bare: !b.fen6, lab: (san) => (b.fen6 ? C.moveLabel(san, fen, 0) : san), what: "Position on the board" },
     };
   }
   const startName = () => (pos.root.source === "standard" ? "Starting position" : "Custom starting position");
@@ -412,6 +457,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const btn = (q, tid, primary) => q && h("button", { tid, className: primary ? "btn primary" : "btn", textContent: q.label, onclick: () => ask(q.msg.mode) });
     let state = "board";
     if (note) kids.push(h("p", { tid: "aq-changed", className: "caveat", textContent: note }));
+    if (reading) kids.push(h("p", { tid: "aq-reading", className: "sub", textContent: "Reading the board…" }));
     if (!b?.valid) {
       state = "unreadable";
       head("Can't read this board", "The pieces don't make a legal position right now. Step to another move, or wait for the pieces to settle.");
@@ -432,7 +478,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       head("Position on the board");
       kids.push(pos.crossCheck?.ok === false
         ? h("p", { tid: "aq-disagree", className: "caveat", textContent: "The move list and the board disagree, so Queen will work from the pieces." })
-        : h("p", { className: "sub", textContent: useBoard ? "Queen will work from the pieces, not the move list." : "The move list can't be used here, so Queen works from the pieces." }));
+        : h("p", { className: "sub", textContent: useBoard ? "Queen will work from the pieces, not the move list." : "The move list can't be used here, so Queen works from the pieces and offers only Best move." }));
       if (b.side) kids.push(h("p", { tid: "aq-side" }, disc(side), `${NAME[side]} to move `,
         h("span", { className: "sub", textContent: `(${side === b.side ? SOURCE[b.sideSource] || "detected" : "your choice"}) ` }),
         h("button", { tid: "aq-side-switch", className: "link", textContent: `Switch to ${NAME[flip(side)]}`, onclick: pick(flip(side)) })));
@@ -443,10 +489,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
             side === s && deco("", "✓ "), `${NAME[s]} to move`))));
       }
       kids.push(row(btn(best, "aq-best", true) || h("button", { tid: "aq-best", className: "btn primary", textContent: "Best move", disabled: true })),
-        h("p", { className: "sub", textContent: `Only Best move is offered without the move list.${b.castleGuessed ? " Castling rights are a guess from where the kings and rooks stand." : ""}` }));
+        b.castleGuessed && h("p", { className: "sub", textContent: "Castling rights are a guess from where the kings and rooks stand." }));
     }
     askBox.dataset.state = state;
-    askBox.replaceChildren(...kids, h("button", { tid: "aq-reread", className: "link", textContent: "Read the board again", onclick: () => { sync(); render(); } }));
+    askBox.replaceChildren(...kids.filter(Boolean), h("button", { tid: "aq-reread", className: "link", textContent: "Read the board again", onclick: () => { sync(); render(); } }));
   }
 
   // --- request ---
@@ -483,7 +529,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
   // position and send nothing.
   function ask(mode, { fresh = false, prefer, from = key(pos) } = {}) {
     const now = read();
-    if (key(now) !== from || key(now) !== key(pos)) return sync(now, "The board changed, so nothing was sent. Check the buttons and ask again.");
+    if (key(now) !== from || key(now) !== key(pos)) return sync(now, "The board has moved, so nothing was sent. Check the buttons and ask again.");
     const q = build(mode);
     if (!q) return render();
     const { msg, ctx } = q;
@@ -561,12 +607,12 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const title = !best ? "Queen didn't name a clear move" // only a verified move may be the headline or the verdict
       : !played ? `Queen plays ${ctx.lab(best)}`
       : agree ? `Queen agrees with ${ctx.lab(played)}` : `${ctx.lab(played)} was played. Queen prefers ${ctx.lab(best)}.`;
-    const verdict = best && played && (agree ? "Queen would play the same move. This is its explanation."
+    const verdict = best && played && (agree ? "This is its explanation."
       : `This explains ${C.stripSan(best)}. Queen can't judge ${C.stripSan(played)} directly.`);
     const other = r.truncated && h("button", { tid: "aq-other-server", className: "link", textContent: "Try the other server", onclick: () => again(ctx, { fresh: true, prefer: "other" }) });
-    const facts = [["aq-eval", "Evaluation", r.evaluationText], ["aq-line", "Critical line", r.criticalLine]].filter(([, , v]) => typeof v === "string" && v.trim());
-    const analysis = h("div", { tid: "aq-analysis", className: "md" });
-    analysis.innerHTML = md(r.analysis || "Queen didn't write an explanation this time."); // md() escapes first
+    const line = ctx.bare && typeof r.criticalLine === "string" ? r.criticalLine.replace(/\d+\.(?:\.\.)?\s*/g, "") : r.criticalLine;
+    const facts = [["aq-eval", "Evaluation", r.evaluationText], ["aq-line", "Critical line", line]].filter(([, , v]) => typeof v === "string" && v.trim());
+    const analysis = h("div", { tid: "aq-analysis", className: "md" }, md(r.analysis || "Queen didn't write an explanation this time."));
     const copy = h("button", { tid: "aq-copy-fen", className: "btn", textContent: "Copy FEN", onclick: async () => {
       try { await navigator.clipboard.writeText(r.fen); copy.textContent = "Copied"; } catch { copy.textContent = "Couldn't copy"; }
       setTimeout(() => { copy.textContent = "Copy FEN"; }, 1500);
@@ -576,9 +622,10 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const banner = h("div", { tid: "aq-stale", className: "caveat", hidden: true }, h("p", { textContent: STALE }), row(reask));
 
     show("result", {
-      before: [h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`), banner],
+      before: h("p", { tid: "aq-context", className: "sub" }, disc(ctx.who), `${ctx.what}, ${NAME[ctx.who]} to move`),
       status: h("h3", { tid: "aq-headline", textContent: title }),
       after: [other && h("div", { tid: "aq-truncated", className: "caveat" }, h("p", { textContent: "The answer was cut off." }), other),
+        banner,
       verdict && h("p", { tid: "aq-verdict", className: "sub", textContent: verdict }),
       r.best?.source === "prose_verified" && h("p", { tid: "aq-from-text", className: "sub", textContent: "This move was taken from Queen's text." }),
       !best && r.suggestion?.san && h("p", { tid: "aq-suggestion", className: "caveat", textContent: `Queen's text suggests ${ctx.lab(r.suggestion.san)} (unverified)` }),

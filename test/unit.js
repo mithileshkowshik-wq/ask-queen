@@ -169,6 +169,27 @@ function runUnits(test) {
       } finally { doc.close(); }
     }
   });
+  test("AQ.gate() caches: a quiet tick is one querySelector; URL, board or a click recomputes it", () => {
+    const doc = fixtureDoc("chesscom-live-tab-review");
+    try {
+      const { w } = doc, { document } = w;
+      assert.equal(w.AQ.gate().gate, "in_progress");
+      let one = 0, all = 0;
+      const q = w.Document.prototype.querySelector, qa = w.Document.prototype.querySelectorAll;
+      w.Document.prototype.querySelector = function (...a) { one++; return q.apply(this, a); };
+      w.Document.prototype.querySelectorAll = function (...a) { all++; return qa.apply(this, a); };
+      for (let i = 0; i < 5; i++) w.AQ.gate();
+      assert.deepEqual([one, all], [5, 0], "five quiet ticks");
+      document.querySelector(".clock-player-turn").remove();
+      document.querySelector("wc-simple-move-list").insertAdjacentHTML("beforeend", '<div class="game-result">1-0</div>');
+      assert.equal(w.AQ.gate().gate, "in_progress", "no recompute without a trigger (fails closed)");
+      document.dispatchEvent(new w.Event("pointerdown"));
+      assert.equal(w.AQ.gate().gate, null, "a click marks it for a recompute");
+      w.history.pushState({}, "", "/puzzles/rated");
+      assert.equal(w.AQ.gate().gate, "puzzle", "a URL change recomputes");
+      assert.equal(w.AQ.confirm(), false);
+    } finally { doc.close(); }
+  });
   test("A moving piece keeps the board unreadable until it lands", () => {
     for (const id of ["lichess-animation", "chesscom-animation"]) {
       const doc = fixtureDoc(id);
@@ -279,6 +300,87 @@ function runUnits(test) {
     assert.equal(bg.plainAnalysis("1. Develop\n\nBEST_MOVE: 4. Nxe5\nEVALUATION: x", "w"), "1. Develop");
     assert.equal(bg.plainAnalysis("The player's knight; a strong player beats the opponent.", "w"),
       "White's knight; a strong player beats Black.");
+  });
+  test("Full SAN replay: legal moves, disambiguation by pins, castling, en passant, promotion, rights and clocks", () => {
+    const go = (moves, fen = F.START) => C.replay(fen, moves.split(" ").filter(Boolean));
+    assert.equal(go("e4 e5 Nf3 Nc6 Bc4"), F.ITALIAN);
+    assert.equal(go("e4 e5 Nf3 Nc6 Bc4 Bc5 O-O"), "r1bqk1nr/pppp1ppp/2n5/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4");
+    assert.equal(go("d4 d5 Nc3 Nc6 Bf4 Bf5 Qd2 Qd7 e3 O-O-O"), "2kr1bnr/pppqpppp/2n5/3p1b2/3P1B2/2N1P3/PPPQ1PPP/R3KBNR w KQ - 1 6");
+    assert.equal(go("e4 Nf6 e5 d5"), "rnbqkb1r/ppp1pppp/5n2/3pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 3", "ep only when a capture is legal");
+    assert.equal(go("e4"), "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1");
+    assert.equal(go("e4 Nf6 e5 d5 exd6"), "rnbqkb1r/ppp1pppp/3P1n2/8/8/8/PPPP1PPP/RNBQKBNR b KQkq - 0 3");
+    assert.equal(go("a4 b5 axb5 a6 bxa6 Bb7 axb7 Nc6 bxa8=N"), "N2qkbnr/2pppppp/2n5/8/8/8/1PPPPPPP/RNBQKBNR b KQk - 0 5", "rook capture drops q");
+    assert.equal(go("h4 h5 Rh3 Rh6 Rh1 Rh8"), "rnbqkbnr/ppppppp1/8/7p/7P/8/PPPPPPP1/RNBQKBNR w Qq - 4 4", "a rook that went home keeps no right");
+    assert.equal(go("Nf3", "4k3/8/8/8/1b6/8/3N4/4K1N1 w - - 0 1"), "4k3/8/8/8/1b6/5N2/3N4/4K3 b - - 1 1", "the pinned knight can't be meant");
+    for (const bad of ["Qh5", "e5", "Nd2", "O-O", "e4 e5 Ke2 Ke7 O-O", "e4 d5 Bb5 Nd7 Nf3 Nb6", "e4 e5 Bxe5", "Nf3 Nf6 Nf6"])
+      assert.equal(go(bad), null, bad);
+    assert.equal(go("O-O", "4k3/8/8/8/8/8/4b3/R3K2R w KQ - 0 1"), null, "castling through check");
+    assert.equal(go("O-O-O", "4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1"), "4k3/8/8/8/8/8/8/2KR3R b - - 1 1");
+    assert.equal(go("e8", "4k3/4P3/8/8/8/8/8/4K3 w - - 0 1"), null, "a pawn reaching the last rank must promote");
+    assert.equal(go("f3 e5 g4 Qh4#"), F.MATE);
+  });
+  test("Adapters drop a move list whose replay doesn't match the exact FEN's castling or en passant", () => {
+    const doc = fixtureDoc("lichess-rights-mismatch");
+    try {
+      const pos = doc.w.AQ.readPosition();
+      assert.equal(pos.moves, null);
+      assert.match(pos.crossCheck.reason, /castling/);
+    } finally { doc.close(); }
+  });
+  test("Background checks the returned FEN against the replayed line, rights and en passant included", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const answer = (fen) => bg.normalized([{ ...F.boneylandSuccess, fen }], "boneyland", req, "boneyland", 1).positionCheck;
+    assert.equal(answer(F.ITALIAN), "ok");
+    assert.equal(answer(F.ITALIAN.replace("KQkq", "Kkq")), "mismatch");
+    assert.equal(answer(F.ITALIAN.replace(" - 3 3", " e3 3 3")), "mismatch");
+    const explain = makeRequest("explain", F.START, "e4 e5 Nf3 Nc6", { played: "Bc4", position: F.ITALIAN });
+    assert.equal(bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6 }], "boneyland", explain, "boneyland", 1).positionCheck, "ok");
+    assert.equal(bg.normalized([{ ...F.boneylandSuccess, fen: F.NC6.replace("KQkq", "kq") }], "boneyland", explain, "boneyland", 1).positionCheck, "mismatch");
+  });
+  test("Token redaction also catches paragraph, cross-field and invisible-character splits", () => {
+    const token = "hf_SavedToken1234567890";
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const run = (analysis, evaluation = "White is better.") =>
+      bg.normalized([{ ...F.boneylandSuccess, analysis, evaluation }], "boneyland", req, "boneyland", 1, token);
+    const leaked = (r) => (r.analysis + r.evaluationText + r.criticalLine).replace(/[^A-Za-z0-9]/g, "").includes("SavedToken1234567890");
+    for (const analysis of ["Key hf_Saved\n\nToken1234567890 here.", "Key hf_Saved\nToken1234\n567890.",
+      "Key hf_​Saved­Token⁠1234﻿567890.", "Key hf_Saved. Token-1234/567890."]) {
+      const r = run(analysis);
+      assert(!leaked(r), JSON.stringify(analysis));
+      assert.match(r.analysis, /\[(?:token removed|redacted)\]/);
+    }
+    const cross = run("The best move is Be7. hf_Saved", "Token1234567890: White is better");
+    assert(!leaked(cross));
+    assert.equal(cross.analysis, "[redacted]");
+    assert.equal(bg.normalized([{ ...F.boneylandSuccess, analysis: "Fine hf_ prose about the h-file and more words." }],
+      "boneyland", req, "boneyland", 1, token).analysis, "Fine hf_ prose about the h-file and more words.");
+  });
+  test("Evaluation rows: both real recordings name a side, a sideless sentence is dropped, an equal one names both", () => {
+    const hugReq = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const hug = bg.normalized(F.hugging, "hugging-apps", hugReq, "hugging-apps", 16);
+    assert.equal(hug.evaluationText, "Black is slightly worse by approximately 0.21 pawns, conceding a modest space edge and slightly more active pieces to White in a strategically balanced Italian Game structure.");
+    assert.doesNotMatch(hug.analysis, /EVALUATION:/);
+    const bonyReq = makeRequest("best", F.START, F.RECORDED_MOVES.join(" "), { position: F.RECORDED_FEN });
+    const bony = bg.normalized(F.boneyland, "boneyland", bonyReq, "boneyland", 16);
+    for (const [r, best, line] of [[hug, "Be7", /^3\.\.\.Be7 4\.O-O Nf6/], [bony, "Nxe5", /^4\.Nxe5 Qf6 5\.O-O/]]) {
+      assert.equal(r.best.san, best);
+      assert.equal(r.best.source, "structured");
+      assert.match(r.criticalLine, line);
+      assert.match(r.evaluationText, /^(?:White|Black) is /);
+      assert.equal(r.positionCheck, "ok");
+      assert.equal(r.truncated, false);
+    }
+    const ev = (evaluation) => bg.normalized([{ ...F.boneylandSuccess, evaluation }], "boneyland", hugReq, "boneyland", 1).evaluationText;
+    assert.equal(ev("The position is unclear."), null);
+    assert.equal(ev("The position is balanced."), "Equal for White and Black: The position is balanced.");
+    assert.equal(ev("the opponent is better"), "White is better");
+  });
+  test("hugging-apps prose is confirmed by its recorded critical_line.legal_steps object", () => {
+    const req = makeRequest("best", F.START, F.OPENING.join(" "), { position: F.ITALIAN });
+    const [svg, html, , data] = F.hugging;
+    assert.equal(typeof data.critical_line, "object");
+    const r = bg.normalized([svg, html, "The best move is 3...Be7.", { ...data, move_source: "promising_or_analysis" }], "hugging-apps", req, "hugging-apps", 1);
+    assert.deepEqual(r.best, { san: "Be7", uci: "f8e7", source: "prose_verified" });
   });
   test("Token redaction runs last and catches the saved token split by markup or Markdown", () => {
     const token = "hf_SavedToken1234567890";

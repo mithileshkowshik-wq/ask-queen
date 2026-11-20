@@ -7,8 +7,13 @@
   const TREE = ".tview2";
   const resultText = (s) => /^(?:1-0|0-1|1\/2-1\/2|½-½)$/.test(s?.trim() || "");
   const tag = AQ.tag;
-  const pgnText = () => [...document.querySelectorAll(".copyables textarea, .pgn textarea, textarea[name='pgn']")]
-    .map((node) => node.value).join("\n");
+  // lila's underboard shows the PGN as text in div.pgn (older builds and the editor use a textarea).
+  const pgnText = () => [...document.querySelectorAll(".copyables .pgn, .analyse__underboard .pgn, .pgn textarea, textarea[name='pgn']")]
+    .map((node) => node.value ?? node.textContent).join("\n");
+  // lila tags the analysis and round roots with variant-<key>: fromPosition is a custom start, anything else but
+  // standard is a variant.
+  const variantKey = () => [...(document.querySelector("main.analyse, .round__app")?.classList || [])]
+    .find((c) => c.startsWith("variant-"))?.slice(8);
 
   function scope(tree, pgn, visible) {
     const path = location.pathname;
@@ -17,14 +22,16 @@
     const gameAnalysis = GAME_ANALYSIS.test(path);
     const page = study ? "study" : round && !tree ? "game" : tree ? "analysis" : "unknown";
     if (/^\/(?:training|streak|storm|racer)(?:\/|$)/.test(path) || document.querySelector(".puzzle__board")) return { page, gate: "puzzle" };
-    const variant = tag(pgn, "Variant");
+    const variant = tag(pgn, "Variant"), key = variantKey();
     const meta = [...document.querySelectorAll(".game__meta a, .game__meta .variant, .study__chapter [data-variant], [data-game-variant]")]
       .some((el) => VARIANT_NAME.test(el.dataset.variant || el.dataset.gameVariant ||
         (el.matches("a") ? el.pathname : el.textContent)));
-    if (ROUTE_VARIANT.test(path) || meta || (variant && !/^(?:standard|chess|from position)$/i.test(variant)))
+    if (ROUTE_VARIANT.test(path) || meta || (variant && !/^(?:standard|chess|from position)$/i.test(variant)) ||
+        (key && !["standard", "fromPosition"].includes(key)))
       return { page, gate: "variant" };
     const running = document.querySelector(".rclock.running, .clock.running, .rclock-correspondence.running, .forecast");
-    const result = [...document.querySelectorAll(".result-wrap .result, .game__meta .result, .round__app .result")]
+    // Results: the round view's result-wrap and the analysis view's renderResult (div.analyse__moves > div > div.result).
+    const result = [...document.querySelectorAll(".result-wrap .result, .analyse__moves .result, .game__meta .result, .round__app .result")]
       .some((el) => resultText(el.textContent) && visible(el));
     if (running || (round || gameAnalysis) && !result && !(tree && resultText(tag(pgn, "Result"))))
       return { page, gate: "in_progress" };
@@ -35,7 +42,7 @@
 
   function analyseLine(tree) {
     const active = tree.querySelector("move.active[p]");
-    if (!active) return tree.querySelector("move.active") ? null : { moves: [], custom: false };
+    if (!active) return tree.querySelector("move.active") ? null : { moves: [], custom: treeCustom(tree) };
     const path = active.getAttribute("p");
     if (!path || path.length % 2) return null;
     const byPath = new Map();
@@ -49,11 +56,15 @@
       if (!el) return null;
       line.push(el);
     }
-    const first = line[0];
-    const index = first.previousElementSibling;
-    return { moves: line.map((el) => AQ.readSan((el.querySelector("san") || el).textContent)),
-      custom: first.matches(".black, [data-color='black']") || /^(?:\d+\.\.\.|…)$/.test(index?.textContent.trim()) ||
-        (index?.matches("index") && /^\d+$/.test(index.textContent.trim()) && +index.textContent !== 1) };
+    return { moves: line.map((el) => AQ.readSan((el.querySelector("san") || el).textContent)), custom: treeCustom(tree) };
+  }
+
+  // A tree that doesn't start with White's move 1: the column view opens Black-first games with
+  // <index>1</index><move class="empty">, the inline view puts the number inside the move (<index>3.</index>).
+  function treeCustom(tree) {
+    const first = tree.querySelector("move");
+    const index = (first?.querySelector("index") || tree.querySelector("index"))?.textContent.trim();
+    return !!first && (first.matches(".empty, .black, [data-color='black']") || (!!index && !/^1\.?$/.test(index)));
   }
 
   // Round view (lila ui/round/src/view/replay.ts). lila obfuscates and periodically renames these tags
@@ -93,6 +104,8 @@
 
   AQ.adapters.push({
     name: "lichess",
+    host: "lichess.org",
+    board: "cg-board",
     matches: () => location.hostname === "lichess.org" && AQ.hasBoard("cg-board"),
     gate: () => scope(document.querySelector(TREE), pgnText(), AQ.shown).gate,
     read() {
@@ -109,7 +122,9 @@
       // A FEN in the URL marks a custom start, but only the PGN [FEN] tag is trusted as its root.
       const routeCustom = /^\/analysis\/(?:standard\/)?[^/]*\//.test(location.pathname) || new URLSearchParams(location.search).has("fen");
       const moveNumber = /^\s*(\d+)\s*(\.{1,3})/m.exec(pgn.replace(/^\s*\[.*\]\s*$/gm, ""));
-      const custom = raw?.custom || /\[\s*(?:FEN|SetUp)\b/i.test(pgn) || routeCustom ||
+      const fromPosition = variantKey() === "fromPosition" ||
+        [...document.querySelectorAll(".game__meta")].some((el) => /from position/i.test(el.textContent));
+      const custom = raw?.custom || fromPosition || /\[\s*(?:FEN|SetUp)\b/i.test(pgn) || routeCustom ||
         (moveNumber && (moveNumber[1] !== "1" || moveNumber[2] === "...")) ||
         (raw?.moves.length === 0 && exactFen && exactFen !== C.START_FEN);
       const line = AQ.root(raw?.moves, { fen: pgnFen, custom });

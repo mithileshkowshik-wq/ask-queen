@@ -4,7 +4,8 @@ const path = require("node:path");
 
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1";
-const E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2";
+// No en passant square: no white pawn can take on e6 (python-chess and lichess write it only when legal).
+const E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2";
 const NC6 = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
 const ITALIAN = "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3";
 const OPENING = ["e4", "e5", "Nf3", "Nc6", "Bc4"];
@@ -103,7 +104,8 @@ function review(moves, selected, figurines) {
 const SITES = {};
 const REPLY_FENS = new Map();
 const positionKey = (fen, moves) => JSON.stringify([fen, moves]);
-const pgn = (fen, text = "") => `<div class="copyables"><textarea>[SetUp "1"]\n[FEN "${fen}"]\n\n${text}</textarea></div>`;
+// lila's underboard: the PGN export as text in div.pgn (ui/analyse/src/view/... copyables).
+const pgn = (fen, text = "") => `<div class="analyse__underboard"><div class="copyables"><div class="pgn">[SetUp "1"]\n[FEN "${fen}"]\n\n${text}</div></div></div>`;
 
 const css = `html{color-scheme:dark}body{margin:0;background:#201e1a;color:#eee;font:16px system-ui;display:flex;gap:24px;padding:24px}
   cg-board,wc-chess-board{display:block;position:relative;width:var(--size);height:var(--size);isolation:isolate}
@@ -118,17 +120,20 @@ const css = `html{color-scheme:dark}body{margin:0;background:#201e1a;color:#eee;
   .site-controls{margin-top:12px}`;
 
 function fixture(id, { site = id.startsWith("lichess") ? "lichess" : "chess.com", url, fen, moves, selected,
-  expect, highlight = [], boardOptions = {}, extra = "", customTree, figurines = false, finished = true } = {}) {
+  expect, highlight = [], boardOptions = {}, extra = "", customTree, figurines = false, finished = true, rootClass } = {}) {
   const lichess = site === "lichess";
   const host = lichess ? "lichess.org" : "www.chess.com";
   const list = customTree ?? (moves ? (lichess ? tree(moves, selected) : review(moves, selected, figurines)) : lichess ? tree([], -1) : "");
-  const main = fen ? `<main aria-label="Chessboard">${board(site, fen, { highlights: highlight, ...boardOptions })}
+  const main = fen ? `<main${rootClass ? ` class="${rootClass}"` : ""} aria-label="Chessboard">${board(site, fen, { highlights: highlight, ...boardOptions })}
     <nav class="site-controls" aria-label="Move navigation"><button id="site-previous">Previous move</button><button>Next move</button></nav></main>` : "";
   // chess.com game pages (Game Review included) open only with a result on screen, as the finished move list shows.
+  // The result sits inside the move list, the only place the adapter accepts it (or an empty list when there are no moves).
   const result = !lichess && finished ? '<div class="game-result">1-0</div>' : "";
+  const listed = !result ? list : /<\/(?:wc-simple-move-list|div)>\s*$/.test(list)
+    ? list.replace(/(<\/(?:wc-simple-move-list|div)>)\s*$/, result + "$1") : list + `<wc-simple-move-list class="move-list">${result}</wc-simple-move-list>`;
   const html = `<!doctype html><html lang="en" data-fixture="${id}"><meta charset="utf-8"><title>${id}</title><style>${css}</style>
     <script>window.siteEarlyKeys = 0; addEventListener("keydown", () => window.siteEarlyKeys++, true);</script>
-    <body>${main}${list}${result}${extra}</body></html>`;
+    <body>${main}${listed}${extra}</body></html>`;
   SITES[id] = { url: `https://${host}${url || (lichess ? "/analysis" : "/analysis/game/live/123456789?tab=review")}`,
     html, expect, fen };
   if (expect?.replyFen) REPLY_FENS.set(positionKey(expect.fen, expect.moves), expect.replyFen);
@@ -146,6 +151,7 @@ for (const site of ["lichess", "chesscom"]) {
   fixture(main, { fen: ITALIAN, moves: OPENING.concat("Be7"), selected: 4, highlight: [["f1"], ["c4"]],
     figurines: !li, expect: fromStart(OPENING.slice(0, -1), NC6, { explain: "3.Bc4" }) });
   REPLY_FENS.set(positionKey(START, OPENING.join(" ")), ITALIAN);
+  REPLY_FENS.set(positionKey(START, "f3 e5 g4"), "rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2/PPPPP2P/RNBQKBNR b KQkq - 0 2");
   add("start", { fen: START, moves: OPENING, selected: -1, expect: current(START) });
   add("final", { fen: ITALIAN, moves: OPENING, selected: 4, expect: fromStart(OPENING, ITALIAN) });
   add("flipped", { fen: E5, moves: OPENING, selected: 1, boardOptions: { flipped: true }, highlight: [["e7"], ["e5"]],
@@ -178,7 +184,7 @@ for (const site of ["lichess", "chesscom"]) {
     expect: blocked("in_progress") });
   add("puzzle", { url: li ? "/training/abcde" : "/puzzles/rated", fen: E4, expect: blocked("puzzle") });
   add("960", { url: li ? "/analysis/chess960" : "/variants/chess960", fen: START, expect: blocked("variant") });
-  add("variant", { fen: START, extra: li ? '<div class="pgn"><textarea>[Variant "Atomic"]</textarea></div>' :
+  add("variant", { fen: START, extra: li ? '<div class="analyse__underboard"><div class="copyables"><div class="pgn">[Variant "Atomic"]</div></div></div>' :
     '<div class="variant-badge">Atomic</div>', expect: blocked("variant") });
   add("unknown", { url: "/somewhere/unknown", fen: START, customTree: "", expect: blocked("unknown_context") });
   add("no-board", { url: "/forum", customTree: "", expect: { noBoard: true } });
@@ -209,11 +215,53 @@ fixture("lichess-round", { url: "/abcdefgh", fen: E5,
 fixture("lichess-round-current", { url: "/abcdefgh", fen: E5,
   customTree: '<i5d><app><qzm>1</qzm><z7yx>e4</z7yx><z7yx class="a1t">e5</z7yx></app><div class="result-wrap"><p class="result">½-½</p><p class="status">Draw</p></div></i5d>',
   expect: fromStart(["e4", "e5"], E5) });
-fixture("lichess-finished", { url: "/abcdefgh", fen: ITALIAN, highlight: [["f1"], ["c4"]],
-  customTree: tree(OPENING, 4).replace("</div>", '<div class="result-wrap"><p class="result">1-0</p></div></div>'),
-  expect: fromStart(OPENING, ITALIAN) });
-fixture("lichess-study", { url: "/study/abcdEF12/abcdEF34", fen: BLACK_CASTLE[1], moves: ["O-O-O"], selected: 0,
-  extra: pgn(BLACK_CASTLE[0]), expect: send(BLACK_CASTLE[0], "", BLACK_CASTLE[0], { explain: "14...O-O-O" }) });
+// lila analyse view markup (ui/analyse treeView and underboard): <index> and <move p> in the column view, the index
+// inside each move in the inline view, renderResult under the tree, the FEN input and the PGN as text.
+function lilaTree(moves, selected, { inline = false, start = 1, blackFirst = false } = {}) {
+  const out = [];
+  moves.forEach((san, i) => {
+    const ply = i + (blackFirst ? 1 : 0), number = start + Math.floor(ply / 2), white = ply % 2 === 0;
+    const label = white ? number + "." : i === 0 ? number + "..." : "";
+    const index = inline && label ? `<index>${label}</index>` : "";
+    if (!inline && white) out.push(`<index>${number}</index>`);
+    if (!inline && i === 0 && !white) out.push(`<index>${number}</index><move class="empty">...</move>`);
+    out.push(`<move p="${"aa".repeat(i + 1)}"${i === selected ? ' class="active"' : ""}>${index}<san>${san}</san></move>`);
+  });
+  return `<div class="tview2 tview2-${inline ? "inline" : "column"}">${out.join("")}</div>`;
+}
+const lilaResult = (tree, result = "1-0") => `<div class="analyse__moves">${tree}<div><div class="result">${result}</div><div class="status">Black resigned</div></div></div>`;
+const underboard = (fen, pgnText) => `<div class="analyse__underboard"><div class="copyables"><div class="pair"><label>FEN</label>` +
+  `<input readonly spellcheck="false" class="copyable analyse__underboard__fen" value="${fen}"></div><div class="pgn">${pgnText}</div></div></div>`;
+fixture("lichess-finished", { url: "/abcdefgh", fen: ITALIAN, highlight: [["f1"], ["c4"]], rootClass: "analyse variant-standard",
+  customTree: lilaResult(lilaTree(OPENING, 4)),
+  extra: underboard(ITALIAN, '[Event "Rated blitz game"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 Nc6 3. Bc4 1-0'),
+  expect: fromStart(OPENING, ITALIAN, { exact: ITALIAN }) });
+// A study chapter from a position: lila marks it variant-fromPosition and shows no PGN, so only the board is used.
+fixture("lichess-study", { url: "/study/abcdEF12/abcdEF34", fen: BLACK_CASTLE[1], highlight: [["e8"], ["c8"]],
+  rootClass: "analyse variant-fromPosition", customTree: lilaTree(["O-O-O"], 0, { start: 14, blackFirst: true }),
+  expect: current("2kr3r/8/8/8/8/8/8/4K3 w - - 0 1", { sideSource: "lastmove" }) });
+// From Position with the standard placement but other castling rights (Fable round 3): never replayed from the start.
+const KK_ROOT = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Kk - 0 1";
+const NF3_PLACEMENT = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R";
+fixture("lichess-frompos-round", { url: "/abcdefgh", fen: NF3_PLACEMENT + " b Kk - 1 2", highlight: [["g1"], ["f3"]],
+  rootClass: "round__app variant-fromPosition",
+  customTree: '<rm6><l4x><i5z>1</i5z><kwdb>e4</kwdb><kwdb>e5</kwdb><i5z>2</i5z><kwdb class="a1t">Nf3</kwdb></l4x>' +
+    '<div class="result-wrap"><p class="result">1-0</p></div></rm6>',
+  expect: current(NF3_PLACEMENT + " b KQkq - 0 1", { sideSource: "lastmove" }) });
+fixture("lichess-frompos-analysis", { url: "/abcdefgh", fen: NF3_PLACEMENT + " b Kk - 1 2", highlight: [["g1"], ["f3"]],
+  rootClass: "analyse variant-fromPosition", customTree: lilaResult(lilaTree(["e4", "e5", "Nf3"], 2)),
+  extra: underboard(NF3_PLACEMENT + " b Kk - 1 2", `[SetUp "1"]\n[FEN "${KK_ROOT}"]\n[Result "1-0"]\n\n1. e4 e5 2. Nf3 1-0`),
+  expect: send(KK_ROOT, "e4 e5", "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w Kk - 0 2", { explain: "2.Nf3" }) });
+fixture("lichess-study-960", { url: "/study/abcdEF12/abcdEF56", fen: START, rootClass: "analyse variant-chess960",
+  customTree: lilaTree(["e4"], 0), expect: blocked("variant") });
+fixture("lichess-study-crazyhouse", { url: "/study/abcdEF12/abcdEF78", fen: START, rootClass: "analyse variant-crazyhouse",
+  customTree: lilaTree(["e4"], 0), expect: blocked("variant") });
+// 32-piece custom starts: the inline view numbers the first move 3., the column view opens with Black's "...".
+fixture("lichess-inline-custom", { fen: ITALIAN, highlight: [["f1"], ["c4"]], rootClass: "analyse variant-standard",
+  customTree: lilaTree(["Bc4"], 0, { inline: true, start: 3 }), expect: current(ITALIAN.replace("3 3", "0 1"), { sideSource: "lastmove" }) });
+fixture("lichess-column-black-first", { fen: "rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 2", highlight: [["e7"], ["e5"]],
+  rootClass: "analyse variant-standard", customTree: lilaTree(["e5"], 0, { blackFirst: true }),
+  expect: current("rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq e6 0 1", { sideSource: "lastmove" }) });
 fixture("lichess-custom-start", { fen: CUSTOM_CLOCKS, moves: ["Kd7"], selected: -1,
   extra: `<div class="copyables"><input value="${CUSTOM_CLOCKS}"></div>`,
   expect: current(CUSTOM_CLOCKS, { sideSource: "fen" }) });
@@ -221,8 +269,9 @@ fixture("lichess-fen-mismatch", { fen: ITALIAN, moves: OPENING, selected: 4, ext
   highlight: [["f1"], ["c4"]], expect: current(ITALIAN.replace("3 3", "0 1"), { disagree: true, sideSource: "lastmove" }) });
 fixture("lichess-streak", { url: "/streak", fen: START, expect: blocked("puzzle") });
 fixture("chesscom-analysis", { url: "/analysis", fen: ITALIAN, moves: OPENING, selected: 4, expect: fromStart(OPENING, ITALIAN) });
-fixture("chesscom-finished", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1, finished: false,
-  extra: '<div class="game-result">1–0</div>', expect: fromStart(["e4", "e5"], E5) });
+const inList = (list, html) => list.replace("</wc-simple-move-list>", html + "</wc-simple-move-list>");
+fixture("chesscom-finished", { url: "/game/live/123456789", fen: E5, finished: false,
+  customTree: inList(review(OPENING, 1), '<div class="game-result">1–0</div>'), expect: fromStart(["e4", "e5"], E5) });
 fixture("chesscom-variation", { fen: VARIATION,
   customTree: `<div class="move-list"><div class="node" data-node="0-0">e4</div><div class="node" data-node="0-1">e5</div>
   <div class="node" data-node="0-2">Nf3</div><div class="variation"><div class="node" data-node="1-0">Bc4</div>
@@ -258,8 +307,8 @@ fixture("chesscom-live-markup-black", { url: "/analysis/game/live/187446826044/r
   customTree: liveReview(OPENING.slice(0, 4), 3), expect: fromStart(OPENING.slice(0, 4), NC6) });
 fixture("chesscom-text-figurines", { url: "/analysis", fen: ITALIAN, highlight: [["f1"], ["c4"]],
   customTree: review(["e4", "e5", "♘f3", "♞c6", "♗c4"], 4), expect: fromStart(OPENING, ITALIAN) });
-fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, moves: OPENING, selected: 1, finished: false,
-  extra: '<div hidden class="game-result">1–0</div>', expect: blocked("in_progress") });
+fixture("chesscom-hidden-result", { url: "/game/live/123456789", fen: E5, finished: false,
+  customTree: inList(review(OPENING, 1), '<div hidden class="game-result">1–0</div>'), expect: blocked("in_progress") });
 // A game still being played, reached through Game Review or analysis links: hints never open the gate (§2).
 // One of them also shows a "Draw offered" note, which is not a result.
 const LIVE = review(OPENING.slice(0, 2), 1) + '<div class="clock-component clock-player-turn">4:30</div>';
@@ -270,23 +319,45 @@ for (const [id, url] of [["live-tab-review", "/game/live/4815162342?tab=review"]
     extra: id === "live-review" ? '<div class="board-layout-sidebar"><div class="result">Draw offered</div></div>' : "",
     expect: blocked("in_progress") });
 }
+// Finished-looking evidence that isn't about this game: a [Result] typed into a notes box, a result in the sidebar,
+// and (GPT round 3) a Game Review link with a sidebar result while the clock still runs.
+const QUIET = review(OPENING.slice(0, 2), 1);
+for (const [id, url, list, extra] of [
+  ["live-notes-result", "/game/live/4815162342", QUIET, '<textarea class="notes">[Event "x"]\n[Result "1-0"]</textarea>'],
+  ["live-sidebar-result", "/game/live/4815162342", QUIET, '<div class="board-layout-sidebar"><div class="game-result">1-0</div></div>'],
+  ["live-tab-review-sidebar", "/game/live/4815162342?tab=review", LIVE, '<div class="board-layout-sidebar"><div class="game-result">1-0</div></div>'],
+  ["live-clock-and-result", "/analysis/game/live/4815162342?tab=review", inList(LIVE, '<div class="game-result">1-0</div>'), ""],
+]) fixture("chesscom-" + id, { url, fen: E5, customTree: list, finished: false, highlight: [["e7"], ["e5"]], extra, expect: blocked("in_progress") });
+// Strict SAN after trimming: a space inside one text node is not repaired, so the list is dropped for the board.
+fixture("chesscom-inner-space", { url: "/analysis", fen: E4, highlight: [["e2"], ["e4"]],
+  customTree: '<wc-simple-move-list><div class="node white-move" data-node="0-0"><span class="node-highlight-content selected">e 4</span></div></wc-simple-move-list>',
+  expect: current(E4, { sideSource: "lastmove" }) });
+// Two same-coloured right-click marks (rgba form) are not a last move: the side stays unknown.
+fixture("chesscom-marks-only", { url: "/analysis", fen: E4, customTree: "",
+  highlight: [["e2", "highlight", "rgba(235, 97, 80, 0.8)"], ["e4", "highlight", "rgba(235, 97, 80, 0.8)"]],
+  expect: current(E4.replace(" e3 ", " - "), { sideSource: null, choose: "Black" }) });
+// Two highlight squares of different colours are not a last-move pair either.
+fixture("chesscom-mixed-highlights", { url: "/analysis", fen: E4, customTree: "",
+  highlight: [["e2", "highlight", "rgb(255, 255, 51)"], ["e4", "highlight", "rgb(100, 200, 255)"]],
+  expect: current(E4.replace(" e3 ", " - "), { sideSource: null, choose: "Black" }) });
 // A custom root and the moves before the selected one (lichess [FEN] tag; chess.com share-panel PGN).
 const AFTER_OOO = BLACK_CASTLE[1], AFTER_KE2 = "2kr3r/8/8/8/8/8/4K3/8 b - - 9 15";
 fixture("lichess-custom-line", { fen: AFTER_KE2, moves: ["O-O-O", "Ke2"], selected: 1, highlight: [["e1"], ["e2"]],
   extra: pgn(BLACK_CASTLE[0], "14... O-O-O 15. Ke2"), expect: send(BLACK_CASTLE[0], "O-O-O", AFTER_OOO, { explain: "15.Ke2" }) });
 fixture("chesscom-tagged-root", { fen: AFTER_KE2, moves: ["O-O-O", "Ke2"], selected: 1, highlight: [["e1"], ["e2"]],
-  extra: `<textarea class="share-menu-tab-pgn-textarea">[SetUp "1"]\n[FEN "${BLACK_CASTLE[0]}"]\n\n14... O-O-O 15. Ke2</textarea>`,
+  extra: `<textarea class="share-menu-tab-pgn-textarea" readonly>[SetUp "1"]\n[FEN "${BLACK_CASTLE[0]}"]\n\n14... O-O-O 15. Ke2</textarea>`,
   expect: send(BLACK_CASTLE[0], "O-O-O", AFTER_OOO, { explain: "15.Ke2" }) });
 // chess.com numbers rows with data-whole-move-number; a first row other than 1 is a custom start with no root.
 fixture("chesscom-row-number", { fen: WHITE_CASTLE[1], highlight: [["e1"], ["g1"]],
   customTree: '<wc-simple-move-list><div class="main-line-row" data-whole-move-number="14"><div class="node white-move" data-node="0-0">' +
     '<span class="node-highlight-content selected">O-O</span></div></div></wc-simple-move-list>',
   expect: current("4k3/8/8/8/8/8/8/R4RK1 b - - 0 1", { sideSource: "lastmove" }) });
-// The page's exact FEN says only Black keeps queenside castling, but the move line implies White does too.
+// The page's exact FEN says only Black keeps queenside castling, but the move line implies White does too. The replay
+// catches it before anything is sent: the "disagree" state, and only the exact FEN goes out (no POST of the line).
 const RIGHTS_EXACT = ROOK_DANCE[1].replace(" Qq ", " q ");
 fixture("lichess-rights-mismatch", { fen: ROOK_DANCE[1], moves: ROOK_DANCE[0], selected: 5, highlight: [["h6"], ["h8"]],
   extra: `<div class="copyables"><input value="${RIGHTS_EXACT}"></div>`,
-  expect: fromStart(ROOK_DANCE[0], ROOK_DANCE[1], { mismatch: true, exact: RIGHTS_EXACT }) });
+  expect: current(RIGHTS_EXACT, { disagree: true, sideSource: "fen", exact: RIGHTS_EXACT }) });
 // Sibling lines 2.Nf3 and 2.Bc4, each selected in turn (the repeat-click test switches between them mid-ask).
 const AFTER_E5 = E5;
 for (const [id, fen, active, label] of [

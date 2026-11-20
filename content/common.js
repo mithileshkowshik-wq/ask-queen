@@ -91,6 +91,13 @@ var AQ = globalThis.AQ = { adapters: [] };
     }
     if (root && moves && crossCheck.ok) {
       crossCheck = C.preSendCheck({ rootFen: root.fen, moves, board, highlightSide });
+      // The full replay must rebuild the scanned board exactly, and agree with an exact site FEN on the side to move,
+      // castling and en passant. Otherwise the list is dropped and the panel shows the "disagree" state.
+      const replayed = crossCheck.ok && C.replay(root.fen, moves)?.split(" ");
+      if (crossCheck.ok && (!replayed || replayed[0] !== board.placement))
+        crossCheck = { ok: false, reason: "The moves don't rebuild the board" };
+      else if (crossCheck.ok && board.fen6 && replayed.slice(1, 4).join(" ") !== board.fen6.split(" ").slice(1, 4).join(" "))
+        crossCheck = { ok: false, reason: "The moves and the page's FEN disagree on castling or en passant" };
       const side = moves.length % 2 ? (C.parseFen(root.fen).side === "w" ? "b" : "w") : C.parseFen(root.fen).side;
       if (crossCheck.ok && board.fen6 && board.side !== side) crossCheck = { ok: false, reason: "Side to move disagrees" };
       if (crossCheck.ok) {
@@ -113,10 +120,24 @@ var AQ = globalThis.AQ = { adapters: [] };
     return { moves, root: { fen: C.START_FEN, verified: false, source: "standard" } };
   };
 
-  // For the closed panel: URL and cheap selector checks only, no layout reads. readPosition() decides at click time.
+  // For the closed panel, called about once a second. The full (layout-free) evaluation is cached and redone only when
+  // the URL or the board element changes, or after a click or key press (a game can end by the user's own action),
+  // so a quiet tick costs one querySelector. readPosition() still decides when the panel opens and at click time;
+  // AQ.confirm() is that full read for the moment the gate opens.
+  let cached = null, dirty = true;
+  for (const type of ["pointerdown", "keydown"]) addEventListener(type, () => { dirty = true; }, { capture: true, passive: true });
   AQ.gate = () => {
-    const adapter = AQ.adapters.find((a) => a.matches());
-    return { hasBoard: !!adapter, gate: adapter ? adapter.gate() : null };
+    const adapter = AQ.adapters.find((a) => a.host === location.hostname);
+    const board = adapter ? document.querySelector(adapter.board) : null;
+    if (cached && !dirty && cached.href === location.href && cached.board === board) return cached.value;
+    dirty = false;
+    const value = adapter?.matches() ? { hasBoard: true, gate: adapter.gate() } : { hasBoard: false, gate: null };
+    cached = { href: location.href, board, value };
+    return value;
+  };
+  AQ.confirm = () => {
+    const position = AQ.readPosition();
+    return !!position && position.gate === null;
   };
 
   AQ.readPosition = () => {

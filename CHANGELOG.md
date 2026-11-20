@@ -20,6 +20,8 @@ First version prepared for the Chrome Web Store.
 - **"Try the other server"** on answers that were cut off.
 - **Settings:** Remove token, a token format check, a custom server on your own Hugging Face Space, and a separate
   consent before your token is sent to it. The consent belongs to one address and is cleared when the address changes.
+- **Keyboard shortcut.** Alt+Q opens the panel where the launcher is showing. The panel shows the shortcut, and it
+  can be changed at `chrome://extensions/shortcuts`.
 - **Dock left or right**, remembered.
 - **Retry timing.** When a server says how long to wait, the retry button counts down. A question from another tab
   gets its own message: "Another tab is already asking Queen".
@@ -33,9 +35,10 @@ First version prepared for the Chrome Web Store.
 - **Custom starting positions** are sent from their real start, not replayed from the standard one.
 - **The click re-reads the board.** If the position changed since the button was labelled, nothing is sent.
 - **Answers are checked** against the position you asked about. An answer for a different position is discarded.
+- **The explanation is built as page elements, never parsed as HTML**, so nothing a server sends can become markup.
 - **Only verified moves are headlines.** A move becomes "Queen plays …" or a verdict only when the server checked it
   for legality. Anything else is shown as "Queen's text suggests … (unverified)".
-- **The result card** follows one order: position, headline, caveats, evaluation, main line, explanation, actions,
+- **The result card** follows one order: position, headline, caveats, evaluation, critical line, explanation, actions,
   server and time.
 - **The panel follows the board** as it changes, not on a timer.
 - **Timeouts:** 20 seconds to connect, 45 seconds of silence, 150 seconds in total. The backup server is tried once,

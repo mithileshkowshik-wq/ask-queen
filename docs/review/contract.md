@@ -74,9 +74,12 @@ Returns `null` when there is no board at all. Otherwise it returns:
 - A board with a moving, dragged or fading piece has `valid: false` and `reason: "The board is moving"`. The panel re-reads on the next mutation; a partial scan is never sent (fix pass 2).
 - If `crossCheck.ok` is false, `moves` must be `null` and `root` must not claim to be verified. The panel shows the "disagree" banner (§3.3).
 - `fen6` is set only when the page exposes an exact FEN tied to the board. All six fields are kept.
+- **Full replay (fix pass 3).** `AQChess.replay(rootFen, sans)` returns the six-field FEN after a legal SAN line, or `null`. A verified `moves` list must replay onto the scanned placement exactly, and when `fen6` is set, onto its side, castling and en passant. Otherwise `crossCheck` fails (the "disagree" state) and only the board is used. The background replays every ask as well: the line, plus `played` for Explain, must land on `snapshot.placement`/`side`, or the ask is rejected with `illegal_position` and nothing is sent. The returned `fen` must equal the replayed position (the position after `moves`) in placement, side, castling and en passant.
 
-## `AQ.gate()` (content scripts, fix pass 2)
-Returns `{ hasBoard: bool, gate: null | "in_progress" | "variant" | "puzzle" | "unknown_context" }` from the URL and cheap selector checks only: no `getBoundingClientRect`, `getComputedStyle` or other layout reads (visibility is judged only by `[hidden]`/`aria-hidden`). `gate` is `null` when `hasBoard` is false. The closed panel uses it to show or hide the launcher; `readPosition()` (with layout reads) stays the authority when the panel opens and at click time. A unit test checks that it agrees with `readPosition().gate` on every fixture with layout reads made to throw.
+## `AQ.gate()` and `AQ.confirm()` (content scripts, fix passes 2 and 3)
+`AQ.gate()` returns `{ hasBoard: bool, gate: null | "in_progress" | "variant" | "puzzle" | "unknown_context" }` from the URL and cheap selector checks only: no `getBoundingClientRect`, `getComputedStyle` or other layout reads (visibility is judged only by `[hidden]`/`aria-hidden`). `gate` is `null` when `hasBoard` is false. The closed panel uses it to show or hide the launcher; `readPosition()` (with layout reads) stays the authority when the panel opens and at click time. A unit test checks that it agrees with `readPosition().gate` on every fixture with layout reads made to throw.
+- **Cost (fix pass 3).** The result is cached. It is recomputed only when `location.href` changes, the first board element (`document.querySelector` of the site's board selector) changes, or after a `pointerdown`/`keydown` anywhere (passive capture listeners that only set a flag). A quiet tick costs one `querySelector`. A change with no such trigger keeps the old answer until the next trigger; on a game page that means staying closed. The measured idle cost is in `docs/perf.md`.
+- `AQ.confirm()` is one full `readPosition()` that returns `true` only when it reads a board with `gate === null`. The panel calls it, or `readPosition()`, before it shows the launcher when `AQ.gate()` turns open.
 
 ## Messages
 **Long-lived request:** the panel opens `chrome.runtime.connect({ name: "queen" })` and posts:
@@ -92,7 +95,7 @@ Returns `{ hasBoard: bool, gate: null | "in_progress" | "variant" | "puzzle" | "
 **Background → panel**, on the same port:
 - `{ status: "connecting" | "waiting" | "still_waiting" | "backup" | "keepalive", server: "boneyland" | "hugging-apps" | "custom" }`
 - `{ result: R }`
-- `{ error: { code, detail, retryAfter?, reason? } }` (`detail` is a plain string; `retryAfter` is seconds from a `Retry-After` header on a 429/503; `reason: "other_tab"` with `code: "busy"` means another tab's ask holds the one-in-flight slot, with `detail` "Another tab is already asking Queen."), where `code` is one of the §4.4 codes: `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, `all_unavailable`.
+- `{ error: { code, detail, retryAfter?, reason? } }` (fix pass 3: a server that sent `Retry-After` rests for that long in the background for every ask and tab. While it rests, a `busy`/`quota` primary answers at once with the remaining `retryAfter` and makes no request; a resting `asleep` primary goes straight to the backup) (`detail` is a plain string; `retryAfter` is seconds from a `Retry-After` header on a 429/503; `reason: "other_tab"` with `code: "busy"` means another tab's ask holds the one-in-flight slot, with `detail` "Another tab is already asking Queen."), where `code` is one of the §4.4 codes: `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, `all_unavailable`.
 
 Disconnecting the port means cancel. The background aborts within 1 s.
 
@@ -103,11 +106,13 @@ Every string in `R` and in errors has the saved token, and any `hf_` token-shape
 { server, seconds, cached: bool, fen, analysis: string /* model prose, plain text, raw tokens removed, player/opponent→White/Black */,
   best: { san, uci, source: "structured" | "prose_verified" } | null,
   suggestion: { san, source: "prose_unverified" } | null,
-  evaluation: number | null, evaluationText: string | null /* the model's EVALUATION sentence when boneyland sends one (it names the side), else built from a number */,
+  evaluation: number | null, evaluationText: string | null /* the model's EVALUATION sentence (boneyland's field, or hugging-apps' EVALUATION prose line), player/opponent mapped; it always names White or Black ("Equal for White and Black: …" for an equal sentence), else null; else built from a number */,
   criticalLine: string | null /* numbered SAN */, truncated: bool, moveSource: string,
   positionCheck: "ok" | "mismatch" }
 ```
 `positionCheck` is computed in the background with `verifyBest`/`verifyExplain` against the request's `snapshot`.
+
+**Keyboard shortcut (fix pass 3).** The manifest declares `commands: { "open-panel": { suggested_key: { default: "Alt+Q" } } }`. On that command the background sends `chrome.tabs.sendMessage(tab.id, { type: "openPanel" })` to the active tab, which needs no `tabs` permission. The panel opens on it only when `sender.id` is this extension.
 
 **One-shot** messages through `chrome.runtime.sendMessage`:
 - `{ type: "openOptions" }`

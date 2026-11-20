@@ -34,6 +34,9 @@ function payload(data, plan, api, auth = "") {
   if (plan === "prose") answer.move_source = "random_legal_fallback";
   if (plan === "unclear") Object.assign(answer, { move_source: "random_legal_fallback", analysis: "The best move is not obvious." });
   if (plan === "truncated") Object.assign(answer, F.truncated, { fen });
+  // The server's own guess (d5) alongside prose naming another move: only the prose shows, unverified.
+  if (plan === "promising") Object.assign(answer, { move_source: "promising_or_analysis", best_move_san: "d5", best_move_uci: "d7d5",
+    critical_line_uci: [], critical_line_san: "", analysis: "The best move is 3...Be7, developing.", finish_reason: "stop" });
   if (plan === "mismatch") answer.fen = F.FEN_MISMATCH;
   if (plan === "xss") answer.analysis = F.XSS.join("\n\n");
   if (plan === "echo") {

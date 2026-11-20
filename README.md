@@ -53,7 +53,7 @@ Then, on either site:
 3. Wait. An answer usually takes 15 to 60 seconds, and the free servers queue requests, so it can take longer. After
    two and a half minutes the extension gives up and tells you. **Cancel** stops it at any time.
 
-The answer shows, in order: the position Queen analysed, its move, any caveats, its evaluation and main line when the
+The answer shows, in order: the position Queen analysed, its move, any caveats, its evaluation and critical line when the
 server supplied them, and its explanation. **Copy FEN** copies the analysed position. **Ask again** gets a fresh
 answer.
 
@@ -65,7 +65,9 @@ Good to know while you use it:
   from the pieces instead. The panel shows how it decided whose move it is, with a switch. Castling rights are then a
   guess, and the panel says so. Only Best move is offered, because Explain needs the move before the position.
 - **Move the panel** with the arrow in its header if it covers something. The side is remembered.
-- **Keyboard.** Tab reaches the launcher and everything in the panel, and Escape closes the panel when focus is in it.
+- **Keyboard.** **Alt+Q** opens the panel wherever the Ask Queen button is showing, with focus on the main button.
+  The shortcut is shown in the panel's footer, and you can change it at `chrome://extensions/shortcuts`. Tab reaches
+  the launcher and everything in the panel, and Escape closes the panel when focus is in it.
 
 ## Fair play
 
@@ -123,7 +125,7 @@ What to know about the token:
 | No **Ask Queen** button | The page is a game in progress, a puzzle, a variant, or one the extension doesn't recognise. | Open the finished game, its review, or an analysis board. |
 | **Can't read this board** | The pieces don't make a legal position right now, often mid-animation. | Step to another move, or click **Read the board again**. |
 | "The move list and the board disagree…" | The moves don't lead to the position shown. | Nothing: Queen works from the pieces. Check the side to move. |
-| "The board changed, so nothing was sent." | The position moved between showing the button and your click. | Check the button's label and click again. |
+| "The board has moved, so nothing was sent." | The position moved between showing the button and your click. | Check the button's label and click again. |
 | **Queen didn't name a clear move** | The answer had no move the server could verify. | Read the explanation, or click **Ask again**. |
 | "The answer was cut off." | Queen ran out of room before finishing. | Click **Try the other server**. |
 | **Queen analysed a different position** | The answer didn't match the board you asked about, so it was discarded. | Click **Work from the pieces**, or **Ask again**. |
@@ -198,12 +200,20 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 - **Answers can be wrong**, cut off, or missing a clear move. The panel labels each case.
 - **Standard chess only**, and never during a game.
 - **Working from the pieces is less exact.** Castling rights are guessed from where the kings and rooks stand, and the
-  move counters are reset, so Queen's move is numbered as move 1.
+  move number isn't known, so Queen's moves are shown without one.
 - **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise Queen works
   from the pieces.
 - **Site changes can break reading.** Both sites change their pages without notice. The extension checks the move list
   against the pieces and stops rather than guess, so the usual symptom is "Can't read this board", not a wrong answer.
 - **One question at a time** per browser, with a short pause between questions, out of courtesy to the free servers.
+
+## More detail
+
+- [PRIVACY.md](PRIVACY.md): what is sent, to whom, and what is stored.
+- [docs/threat-model.md](docs/threat-model.md): what the extension protects, from whom, and what it can't.
+- [docs/perf.md](docs/perf.md): the measured cost of the extension on a page when the panel is closed.
+- [docs/live-checklist.md](docs/live-checklist.md): the owner's checks on the live sites.
+- [CHANGELOG.md](CHANGELOG.md): what changed in each version.
 
 ## Licence
 

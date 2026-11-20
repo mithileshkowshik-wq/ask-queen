@@ -88,15 +88,28 @@ function plainAnalysis(text, side) {
 
 // The last step before anything reaches a content script: remove the saved token and anything token-shaped from
 // every string, also when Markdown marks (*, _, `, ~) are wedged between its characters.
-const GAP = "[*_`~]*";
+// The saved token may be split by whitespace and paragraph breaks as well (the renderer joins adjacent text); a
+// generic hf_ run only by Markdown marks, so ordinary prose after a stray "hf_" is never swallowed.
+const GAP = "[*_`~]*", SPACED = "[\\s*_`~]*";
+const deep = (value, fn) => typeof value === "string" ? fn(value) : Array.isArray(value) ? value.map((v) => deep(v, fn)) :
+  value && typeof value === "object" ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deep(v, fn)])) : value;
+const invisible = (value) => deep(value, (s) => s.replace(/[\p{Cf}\u00AD]/gu, ""));
 function scrub(value, token) {
-  if (typeof value === "string") {
-    if (token) value = value.replace(new RegExp(token.split("").join(GAP), "g"), "[token removed]");
-    return value.replace(new RegExp(`h${GAP}f${GAP}_(?:${GAP}[A-Za-z0-9]){8,}`, "g"), "[token removed]");
-  }
-  if (Array.isArray(value)) return value.map((v) => scrub(v, token));
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrub(v, token)]));
-  return value;
+  return deep(value, (s) => {
+    if (token) s = s.replace(new RegExp(token.split("").join(SPACED), "g"), "[token removed]");
+    return s.replace(new RegExp(`h${GAP}f${GAP}_(?:${GAP}[A-Za-z0-9]){8,}`, "g"), "[token removed]");
+  });
+}
+// Last line of defence: the displayed fields, alone and joined, with everything but letters and digits removed, must
+// not spell the saved token (or a long hf_ run). A field that does is replaced; a split across fields clears them all.
+const SHOWN = ["analysis", "evaluationText", "criticalLine"];
+function guard(result, token) {
+  const alnum = (s) => (s || "").replace(/[^A-Za-z0-9]/g, "");
+  const leaks = (s) => (!!token && alnum(s).includes(alnum(token))) || /hf_[A-Za-z0-9]{24,}/.test((s || "").replace(/[\s*`~]/g, ""));
+  if (!leaks(SHOWN.map((key) => result[key]).join("\n"))) return result;
+  const one = SHOWN.some((key) => leaks(result[key]));
+  return { ...result, ...Object.fromEntries(SHOWN.filter((key) => result[key] != null && (!one || leaks(result[key])))
+    .map((key) => [key, "[redacted]"])) };
 }
 
 function proseMove(text) {
@@ -110,6 +123,7 @@ function proseMove(text) {
 }
 
 function normalized(out, api, req, server, seconds, token) {
+  out = invisible(out); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
   const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
     out[3] && typeof out[3] === "object" && { ...out[3], analysis: out[2] });
   const pos = chess.parseFen(raw?.fen);
@@ -131,12 +145,16 @@ function normalized(out, api, req, server, seconds, token) {
     best = { san: prose, uci: lineUci, source: "prose_verified" };
   } else if (prose) suggestion = { san: prose, source: "prose_unverified" };
 
-  // boneyland sends the model's own EVALUATION sentence, which names the side. A bare number (no recording has
-  // one) is read as relative to the side to move, as the model's player/opponent framing is.
+  // The model's EVALUATION sentence: boneyland's evaluation field, else (hugging-apps) the EVALUATION line of the
+  // prose. After player/opponent → White/Black it must name a side; an "equal" sentence is shown as equal for both,
+  // anything else is dropped. A bare number (no recording has one) is read as relative to the side to move.
+  const sentence = typeof ev === "string" ? ev : ev == null ? /^EVALUATION:[ \t]*(.+)$/m.exec(raw.analysis)?.[1] : null;
+  const said = sentence ? plainAnalysis(sentence, pos.side) : "";
   const evaluation = Number.isFinite(ev) ? ev : null;
   const advantaged = (evaluation >= 0) === (pos.side === "w") ? "White" : "Black";
   const value = (advantaged === "White" ? 1 : -1) * Math.abs(evaluation);
-  const evaluationText = typeof ev === "string" ? plainAnalysis(ev, pos.side) || null :
+  const evaluationText = said ? (/\b(?:White|Black)\b/.test(said) ? said :
+      /\b(?:equal|balanced|level|even)\b/i.test(said) ? "Equal for White and Black: " + said : null) :
     evaluation === null ? null : evaluation === 0 ? "White and Black are even (≈ 0)" :
     `${advantaged} is ${Math.abs(value) < 1 ? "slightly better" : "better"} (≈ ${value < 0 ? "−" : "+"}${Math.abs(value)})`;
   const suppliedLine = Array.isArray(raw.critical_line_san) ? raw.critical_line_san.join(" ") : raw.critical_line_san;
@@ -145,35 +163,41 @@ function normalized(out, api, req, server, seconds, token) {
     : Array.isArray(raw.critical_line?.legal_steps) ? raw.critical_line.legal_steps.map((step) => step?.san) : [];
   const criticalLine = line.length && line.every(chess.isStrictSan)
     ? line.map((san, i) => i && (i + (pos.side === "b")) % 2 ? san : chess.moveLabel(san, raw.fen, i)).join(" ") : null;
+  // A replayed line gives the exact position Queen should have analysed, rights and en passant included.
+  const asked = typeof req.moves === "string" && req.moves ? req.moves.split(" ") : [];
+  const expected = asked.length ? chess.replay(req.fen, asked) : null;
+  const same = (a, b) => a.split(" ").slice(0, 4).join(" ") === b.split(" ").slice(0, 4).join(" ");
   // With an exact site FEN the snapshot also carries its rights: a move line must not widen them.
   const { castle } = req.snapshot;
-  const positionOk = req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
+  const positionOk = (!expected || same(raw.fen, expected)) && (req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
     pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played) &&
-    (castle === undefined || [...castle.replace("-", "")].every((right) => pos.castle.includes(right)));
-  return scrub({ server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
-    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" }, token);
+    (castle === undefined || [...castle.replace("-", "")].every((right) => pos.castle.includes(right))));
+  return guard(scrub({ server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
+    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" }, token), token);
 }
 
 const ALLOWED_KEYS = new Set(["type", "mode", "fen", "moves", "played", "snapshot", "fresh", "prefer"]);
 function validAsk(req) {
-  if (!req || req.type !== "ask" || Object.keys(req).some((key) => !ALLOWED_KEYS.has(key)) ||
+  if (!req || typeof req !== "object" || Array.isArray(req) || req.type !== "ask" || Object.keys(req).some((key) => !ALLOWED_KEYS.has(key)) ||
       !["explain", "best"].includes(req.mode) || typeof req.fresh !== "boolean" ||
       (req.prefer !== undefined && (req.prefer !== "other" || !req.fresh)) ||
       typeof req.moves !== "string" || req.moves.length > 12000) return false;
   if (req.mode === "best" ? req.played !== null : !chess.isStrictSan(req.played) || req.played.length > 20) return false;
   const root = chess.parseFen(req.fen);
   const snapshot = req.snapshot;
-  const rights = snapshot && "castle" in snapshot;
-  if (!root || !["w", "b"].includes(snapshot?.side) || typeof snapshot.placement !== "string" ||
-      snapshot.placement.length > 80 || Object.keys(snapshot).length !== (rights ? 4 : 2) ||
-      (rights && !(/^(?:-|K?Q?k?q?)$/.test(snapshot.castle) && snapshot.castle && /^(?:-|[a-h][36])$/.test(snapshot.ep))))
-    return false;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return false;
+  const keys = Object.keys(snapshot).sort().join(), rights = keys === "castle,ep,placement,side";
+  if (!root || !(rights || keys === "placement,side") || !["w", "b"].includes(snapshot.side) ||
+      typeof snapshot.placement !== "string" || snapshot.placement.length > 80 ||
+      (rights && !(typeof snapshot.castle === "string" && /^(?:-|K?Q?k?q?)$/.test(snapshot.castle) && snapshot.castle &&
+        typeof snapshot.ep === "string" && /^(?:-|[a-h][36])$/.test(snapshot.ep)))) return false;
   const placement = chess.parseFen(snapshot.placement + " w - - 0 1")?.placement;
   if (!chess.isPlausibleBoard(root.placement).ok || !chess.isPlausibleBoard(placement).ok) return false;
   const moves = req.moves ? req.moves.split(" ") : [];
-  const plies = moves.length + Number(req.mode === "explain");
-  return moves.length <= 600 && moves.every((m) => m.length <= 20 && chess.isStrictSan(m)) &&
-    ((root.side === snapshot.side) === (plies % 2 === 0));
+  if (moves.length > 600 || !moves.every((m) => m.length <= 20 && chess.isStrictSan(m))) return false;
+  // The full replay of the line (and the played move) must land on the click-time snapshot.
+  const after = chess.replay(req.fen, req.mode === "explain" ? [...moves, req.played] : moves)?.split(" ");
+  return !!after && after[0] === snapshot.placement && after[1] === snapshot.side;
 }
 
 function customOrigin(value) {
@@ -270,12 +294,14 @@ function startExtension() {
   const protectedStorage = protect();
   chrome.runtime.onInstalled.addListener(protect);
 
-  const cache = new Map();
+  const cache = new Map(), cooldowns = new Map();
   const lastServer = new Map();
   let settingsVersion = 0, active = null, lastStart = -Infinity, lastSeed = DEFAULT_SEED;
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local" && ["token", "primary", "custom", "tokenFor"].some((key) => key in changes)) {
+      // New settings (a token for a quota, another server) are a fresh start: no cached answers, no cooldowns.
       cache.clear();
+      cooldowns.clear();
       settingsVersion++;
     }
   });
@@ -325,6 +351,14 @@ function startExtension() {
         return;
       }
       if (hit) cache.delete(key);
+      // A server that sent Retry-After rests that long for every ask and tab. A resting primary with a code that
+      // allows no fallback (busy, quota) answers at once, without a request.
+      const resting = (space) => {
+        const rest = cooldowns.get(space.base);
+        return rest && rest.until > Date.now() ? Object.assign(failure(rest.code), { retryAfter: Math.ceil((rest.until - Date.now()) / 1000) }) : null;
+      };
+      const held = resting(servers[0]);
+      if (held && !TRANSIENT.has(held.code)) throw held;
       const delay = 2000 - (Date.now() - lastStart);
       if (delay > 0) await new Promise((resolve) => {
         const timer = setTimeout(resolve, delay);
@@ -338,11 +372,13 @@ function startExtension() {
         while (seed === lastSeed || seed === DEFAULT_SEED);
         lastSeed = seed;
       }
-      let firstError;
+      let first;
       for (const [i, space] of servers.entries()) {
         job.server = space.name;
-        report(job, i ? "backup" : "connecting");
         try {
+          const rest = resting(space);
+          if (rest) throw rest;
+          report(job, i ? "backup" : "connecting");
           const out = await callSpace(space, req, seed, () => { if (!i) report(job, "waiting"); }, signal);
           signal.throwIfAborted();
           const result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, saved);
@@ -354,9 +390,14 @@ function startExtension() {
           return;
         } catch (err) {
           signal.throwIfAborted();
-          if (i) throw fallbackError(firstError, err.code) === err.code ? err : failure(fallbackError(firstError, err.code));
+          if (err.retryAfter && !resting(space)) cooldowns.set(space.base, { code: err.code, until: Date.now() + err.retryAfter * 1000 });
+          if (i) {
+            const code = fallbackError(first.code, err.code);
+            const wait = Math.max(err.retryAfter || 0, first.retryAfter || 0) || undefined;
+            throw code === err.code ? Object.assign(err, { retryAfter: wait }) : Object.assign(failure(code), { retryAfter: wait });
+          }
           if (!TRANSIENT.has(err.code)) throw err;
-          firstError = err.code;
+          first = err;
         }
       }
     } catch (err) {
@@ -388,8 +429,8 @@ function startExtension() {
       req = { ...req, moves: req.moves && req.moves.split(" ").map(chess.stripSan).join(" "),
         played: req.played && chess.stripSan(req.played) };
       const last = lastServer.get(client.tab);
-      const key = JSON.stringify([req.mode, req.fen, req.moves, req.played, req.snapshot.placement, req.snapshot.side,
-        req.prefer ? last ?? true : null]);
+      const { placement, side, castle = null, ep = null } = req.snapshot;
+      const key = JSON.stringify([req.mode, req.fen, req.moves, req.played, placement, side, castle, ep, req.prefer ? last ?? true : null]);
       if (active && !active.ctrl.signal.aborted) {
         if (active.key === key && active.req.fresh === req.fresh) {
           job = active;
@@ -404,6 +445,11 @@ function startExtension() {
   });
 
   chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+  // Alt+Q (manifest "commands"): ask the tab's panel to open. No tabs permission is needed to message a tab.
+  chrome.commands?.onCommand.addListener((command, tab) => {
+    if (command === "open-panel" && Number.isInteger(tab?.id) && tab.id >= 0)
+      chrome.tabs.sendMessage(tab.id, { type: "openPanel" }).catch(() => {});
+  });
   chrome.runtime.onMessage.addListener((msg, sender, respond) => {
     if (!senderAllowed(sender) || !["getPrefs", "setPrefs", "openOptions"].includes(msg?.type)) return;
     (async () => {
@@ -425,4 +471,4 @@ function startExtension() {
 
 if (typeof chrome !== "undefined" && chrome.runtime) startExtension();
 if (typeof module !== "undefined") module.exports = { createSseParser, classify, fallbackError, normalized, proseMove,
-  plainAnalysis, scrub, retryAfter, validAsk, customOrigin, callSpace, CODES };
+  plainAnalysis, scrub, guard, retryAfter, validAsk, customOrigin, callSpace, CODES };

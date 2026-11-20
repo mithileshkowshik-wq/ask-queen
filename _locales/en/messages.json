@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Ask Queen",
+    "description": "Extension name. Not translated."
+  },
+  "extDescription": {
+    "message": "Explain chess moves on chess.com and lichess with the QUEEN chess language model.",
+    "description": "Store and chrome://extensions description, 132 characters or fewer."
+  },
+  "openPanel": {
+    "message": "Open the Ask Queen panel",
+    "description": "Keyboard shortcut description."
+  }
+}
