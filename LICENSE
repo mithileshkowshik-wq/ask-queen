@@ -1,0 +1,49 @@
+MIT License
+
+Copyright (c) 2026 The Ask Queen authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+Scope of this licence
+
+The MIT licence above covers the Ask Queen extension's own code only: the files
+shipped in the extension package. It grants no rights in the QUEEN model, its
+weights, the servers that host it, or the text they return.
+
+Attribution: QUEEN
+
+Ask Queen sends chess positions to QUEEN (princeton-nlp/queen_pawn-8), a chess
+language model published by Princeton NLP:
+
+  Model card: https://huggingface.co/princeton-nlp/queen_pawn-8
+  Paper:      arXiv:2610.03695
+
+The extension does not contain, bundle or redistribute the model or its
+weights. It reaches the model through community-run Hugging Face Spaces
+(boneyland/queen-pawn-8 and hugging-apps/queen-pawn-8) that are operated by
+their own owners.
+
+Licence status of QUEEN: no blanket licence is asserted for the combined
+weights. Anyone who hosts, copies or redistributes the model must check the
+model card and the terms of its components for themselves.
+
+Ask Queen is unofficial. It is not affiliated with or endorsed by Chess.com,
+Lichess, Princeton NLP or Hugging Face.

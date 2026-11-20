@@ -1,70 +1,117 @@
-// lichess.org adapter: analysis board, finished games, studies, live/round view.
-AQ.adapters.push({
-  name: "lichess",
-  matches: () => location.hostname === "lichess.org" && !!document.querySelector("cg-board"),
+(() => {
+  const C = globalThis.AQChess;
+  const ROUTE_VARIANT = /^\/(?:analysis\/)?(?:chess960|crazyhouse|antichess|atomic|horde|racingkings|kingofthehill|threecheck|3check)(?:\/|$)/i;
+  const ROUND = /^\/[\w]{8}(?:[\w]{4})?(?:\/(?:white|black))?\/?$/;
+  const GAME_ANALYSIS = /^\/\w{8}(?:\/(?:white|black))?\/analysis\/?$/;
+  const VARIANT_NAME = /chess\s*960|crazyhouse|antichess|atomic|horde|racing\s*kings|king\s*of\s*the\s*hill|three.?check|3.?check/i;
+  const TREE = ".tview2";
+  const resultText = (s) => /^(?:1-0|0-1|1\/2-1\/2|½-½)$/.test(s?.trim() || "");
+  const tag = (pgn, name) => new RegExp('^\\s*\\[' + name + '\\s+"([^"]*)"\\s*\\]', "im").exec(pgn)?.[1];
 
-  read() {
-    return { moves: this.moves(), board: this.board() };
-  },
+  function scope(tree, pgn) {
+    const path = location.pathname;
+    const study = /^\/study\//.test(path);
+    const round = ROUND.test(path) && !/^\/(?:analysis|training|broadcast)\/?$/.test(path);
+    const gameAnalysis = GAME_ANALYSIS.test(path);
+    const page = study ? "study" : round && !tree ? "game" : tree ? "analysis" : "unknown";
+    if (/^\/(?:training|streak|storm|racer)(?:\/|$)/.test(path) || document.querySelector(".puzzle__board")) return { page, gate: "puzzle" };
+    const variant = tag(pgn, "Variant");
+    const meta = [...document.querySelectorAll(".game__meta a, .game__meta .variant, .study__chapter [data-variant], [data-game-variant]")]
+      .some((el) => VARIANT_NAME.test(el.dataset.variant || el.dataset.gameVariant ||
+        (el.matches("a") ? el.pathname : el.textContent)));
+    if (ROUTE_VARIANT.test(path) || meta || (variant && !/^(?:standard|chess|from position)$/i.test(variant)))
+      return { page, gate: "variant" };
+    const running = document.querySelector(".rclock.running, .clock.running, .rclock-correspondence.running, .forecast");
+    const result = [...document.querySelectorAll(".result-wrap .result, .game__meta .result, .round__app .result")]
+      .some((el) => resultText(el.textContent) && AQ.visible(el));
+    if (running || (round || gameAnalysis) && !result && !(tree && resultText(tag(pgn, "Result"))))
+      return { page, gate: "in_progress" };
+    if (tree && (study || /^\/analysis(?:\/|$)/.test(path) || round || gameAnalysis)) return { page, gate: null };
+    if (round && result) return { page: "game", gate: null };
+    return { page, gate: "unknown_context" };
+  }
 
-  moves() {
-    // Analysis tree: every <move> carries p = its path from the root (2 chars per ply),
-    // so the moves leading to the active one are those whose path prefixes it (works in variations too).
-    const tree = document.querySelector(".tview2");
-    if (tree) {
-      // A game from a custom start position has a [FEN] tag; then only the board is reliable.
-      if (/\[FEN "/.test(document.querySelector(".copyables textarea, .pgn textarea")?.value || "")) return null;
-      const active = tree.querySelector("move.active[p]");
-      if (!active) return tree.querySelector("move[p]") ? [] : null; // at the start position
-      const path = active.getAttribute("p");
-      const line = [...tree.querySelectorAll("move[p]")]
-        .filter((m) => path.startsWith(m.getAttribute("p")))
-        .sort((a, b) => a.getAttribute("p").length - b.getAttribute("p").length)
-        .map((m) => AQ.cleanSan(m.querySelector("san")?.textContent));
-      return line.length * 2 === path.length && line.every(Boolean) ? line : null;
+  function analyseLine(tree) {
+    const active = tree.querySelector("move.active[p]");
+    if (!active) return tree.querySelector("move.active") ? null : { moves: [], custom: false };
+    const path = active.getAttribute("p");
+    if (!path || path.length % 2) return null;
+    const byPath = new Map();
+    for (const el of tree.querySelectorAll("move[p]")) {
+      const key = el.getAttribute("p");
+      byPath.set(key, byPath.has(key) ? null : el);
     }
-
-    // Round view (game in progress or just finished). Tag names are obfuscated and change over
-    // time, so find the active move by its class and take its same-tag siblings.
-    const active = document.querySelector(".rmoves .a1t, .moves .a1t, .a1t");
-    if (active) {
-      const all = [...active.parentElement.children].filter((e) => e.tagName === active.tagName && e.textContent.trim() !== "…");
-      return all.slice(0, all.indexOf(active) + 1).map((el) => AQ.cleanSan(el.childNodes[0]?.textContent));
+    const line = [];
+    for (let i = 2; i <= path.length; i += 2) {
+      const el = byPath.get(path.slice(0, i));
+      if (!el) return null;
+      line.push(el);
     }
-    return null;
-  },
+    const first = line[0];
+    const index = first.previousElementSibling;
+    return { moves: line.map((el) => AQ.readSan((el.querySelector("san") || el).textContent)),
+      custom: first.matches(".black, [data-color='black']") || /^(?:\d+\.\.\.|…)$/.test(index?.textContent.trim()) ||
+        (index?.matches("index") && /^\d+$/.test(index.textContent.trim()) && +index.textContent !== 1) };
+  }
 
-  board() {
-    const board = document.querySelector("cg-board");
-    if (!board) return null;
-    const flipped = !!board.closest(".orientation-black");
-    const size = board.getBoundingClientRect().width / 8;
-    const sqOf = (el) => {
-      const m = /translate\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/.exec(el.style.transform || "");
+  // Round view (lila ui/round/src/view/replay.ts). lila obfuscates and periodically renames these tags
+  // (current: i5d > app with qzm numbers and z7yx moves; older: rm6 > l4x with i5z and kwdb), so key on
+  // the stable active-move class .a1t and take its same-tag siblings; numbers are the all-digit siblings.
+  function roundLine() {
+    const active = document.querySelector(".round__app .a1t, i5d .a1t, rm6 .a1t, .rmoves .a1t");
+    const list = active?.parentElement || document.querySelector("i5d app, rm6 l4x, .rmoves l4x");
+    if (!list) return null;
+    const kids = [...list.children];
+    const tag = active?.localName || ["z7yx", "kwdb"].find((t) => kids.some((el) => el.localName === t));
+    const all = kids.filter((el) => el.localName === tag);
+    const first = kids.find((el) => el.localName !== tag && /^\d+$/.test(el.textContent.trim()));
+    return { moves: all.slice(0, all.indexOf(active) + 1).map((el) => AQ.readSan(el.firstChild?.textContent)),
+      custom: all[0]?.textContent.trim() === "…" || (!!first && first.textContent.trim() !== "1") };
+  }
+
+  function readBoard(el) {
+    const flipped = !!el.closest(".orientation-black");
+    const size = el.getBoundingClientRect().width / 8;
+    const squareOf = (node) => {
+      const m = /^translate(?:3d)?\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/.exec(node.style.transform);
       if (!m || !size) return null;
-      let x = Math.round(+m[1] / size), y = Math.round(+m[2] / size);
-      if (flipped) { x = 7 - x; y = 7 - y; }
-      return "abcdefgh"[x] + (8 - y);
+      const x = Math.round(+m[1] / size), y = Math.round(+m[2] / size);
+      if (x < 0 || x > 7 || y < 0 || y > 7) return null;
+      return "abcdefgh"[flipped ? 7 - x : x] + (flipped ? y + 1 : 8 - y);
     };
-    const letter = { pawn: "p", knight: "n", bishop: "b", rook: "r", queen: "q", king: "k" };
-    const pieces = {};
-    for (const el of board.querySelectorAll("piece")) {
-      if (/ghost|fading|dragging/.test(el.className)) continue;
-      const [color, role] = [/white|black/.exec(el.className)?.[0], el.className.split(" ").find((c) => letter[c])];
-      const sq = sqOf(el);
-      if (!color || !role || !sq) continue;
-      pieces[sq] = color === "white" ? letter[role].toUpperCase() : letter[role];
-    }
-    const last = [...board.querySelectorAll("square.last-move")].map(sqOf).filter(Boolean);
-    const b = AQ.boardFromPieces(pieces, last.length === 2 ? last : null);
+    const roles = { pawn: "p", knight: "n", bishop: "b", rook: "r", queen: "q", king: "k" };
+    const pieceOf = (node) => {
+      const role = roles[[...node.classList].find((c) => Object.hasOwn(roles, c))];
+      if (node.matches(".white")) return role?.toUpperCase();
+      if (node.matches(".black")) return role;
+      return null;
+    };
+    return AQ.scan(el, squareOf, pieceOf, "piece", [...el.querySelectorAll("square.last-move")]);
+  }
 
-    // The analysis page shows the exact FEN; prefer its side-to-move when present.
-    const fenInput = [...document.querySelectorAll(".copyables input, input.copyable")]
-      .map((i) => i.value.trim()).find((v) => /^[1-8pnbrqkPNBRQK/]+ [wb] /.test(v));
-    if (fenInput) {
-      const [placement, side, castle, ep] = fenInput.split(" ");
-      return { placement, side, castle, ep };
-    }
-    return b;
-  },
-});
+  AQ.adapters.push({
+    name: "lichess",
+    matches: () => location.hostname === "lichess.org" && AQ.hasBoard("cg-board"),
+    read() {
+      const el = AQ.mainBoard("cg-board", ".main-board, .round__app, .analyse__board");
+      if (!el) return null;
+      const tree = document.querySelector(TREE);
+      const pgn = [...document.querySelectorAll(".copyables textarea, .pgn textarea, textarea[name='pgn']")]
+        .map((node) => node.value).join("\n");
+      const context = scope(tree, pgn);
+      const board = readBoard(el);
+      const exactFen = [...document.querySelectorAll(".copyables input, input.copyable, .copyables [data-fen]")]
+        .map((node) => (node.dataset.fen || node.value || "").trim()).find(C.parseFen);
+      const raw = tree ? analyseLine(tree) : roundLine();
+      const pgnFen = tag(pgn, "FEN");
+      // A FEN in the URL marks a custom start, but only the PGN [FEN] tag is trusted as its root.
+      const routeCustom = /^\/analysis\/(?:standard\/)?[^/]*\//.test(location.pathname) || new URLSearchParams(location.search).has("fen");
+      const moveNumber = /^\s*(\d+)\s*(\.{1,3})/m.exec(pgn.replace(/^\s*\[.*\]\s*$/gm, ""));
+      const custom = raw?.custom || /\[\s*(?:FEN|SetUp)\b/i.test(pgn) || routeCustom ||
+        (moveNumber && (moveNumber[1] !== "1" || moveNumber[2] === "...")) ||
+        (raw?.moves.length === 0 && exactFen && exactFen !== C.START_FEN);
+      const line = AQ.root(raw?.moves, { fen: pgnFen, custom });
+      return AQ.position({ ...context, board, line, exactFen });
+    },
+  });
+})();

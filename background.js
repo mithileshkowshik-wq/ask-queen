@@ -1,100 +1,383 @@
-// Queen client: calls a community Hugging Face Space running princeton-nlp/queen_pawn-8.
-const SEED = 20260823;
-const PROMPT = "Analyze the position carefully and find the best move for player.";
+if (typeof importScripts === "function") importScripts("content/chess.js");
 
-const SPACES = {
-  boneyland: {
-    base: "https://boneyland-queen-pawn-8.hf.space",
-    api: "analyse_position",
-    data: (fen, moves) => [fen, moves, 2048, 0.6, SEED],
-    parse: (out) => out[0],
-  },
-  "hugging-apps": {
-    base: "https://hugging-apps-queen-pawn-8.hf.space",
-    api: "analyze",
-    data: (fen, moves) => [fen, moves, 2048, 0.6, SEED, PROMPT],
-    parse: (out) => ({ analysis: out[2], ...out[3] }),
-  },
+const chess = globalThis.AQChess;
+const DEFAULT_SEED = 20260823;
+const BUILTINS = {
+  boneyland: "https://boneyland-queen-pawn-8.hf.space",
+  "hugging-apps": "https://hugging-apps-queen-pawn-8.hf.space",
 };
+const TRANSIENT = new Set(["unreachable", "asleep", "timeout"]);
+const CODES = {
+  quota: "The provider reported that its free GPU quota was exhausted.",
+  token_rejected: "The provider rejected the Hugging Face credentials.",
+  unreachable: "The server could not be reached or closed the response stream.",
+  asleep: "The server is sleeping, building, or temporarily unavailable.",
+  timeout: "The server did not respond within the time limit.",
+  busy: "The server queue is full or rate limited.",
+  illegal_position: "The position or move list could not be used.",
+  game_over: "The position has no further moves.",
+  bad_response: "The server's format changed. Check for an update.",
+  cancelled: "The request was cancelled.",
+  extension_reloaded: "The extension was reloaded.",
+  all_unavailable: "The primary and backup servers were unavailable.",
+};
+const failure = (code) => Object.assign(new Error(CODES[code]), { code });
 
-async function callSpace(space, { fen, moves }, token, onStatus, signal) {
+function classify(status, detail = "") {
+  if (/quota|zero.?gpu.*(?:exhaust|limit)/i.test(detail)) return "quota";
+  if (status === 401 || status === 403 || /(?:invalid|reject|missing|expired).{0,25}(?:token|credential)|unauthori[sz]ed/i.test(detail))
+    return "token_rejected";
+  if (/game (?:is (?:already )?)?over|no legal moves|checkmate|stalemate/i.test(detail)) return "game_over";
+  if (/illegal (?:position|move|san|fen)|invalid (?:position|move|san|fen)|could not (?:parse|apply).*move/i.test(detail))
+    return "illegal_position";
+  if (status === 429 || /queue.{0,20}full|queue at capacity/i.test(detail)) return "busy";
+  if (status === 503 || /<(?:!doctype\s+html|html\b)|space.{0,30}(?:sleep|build|start)/i.test(detail)) return "asleep";
+  if (status === 404 || status >= 500 || !status) return "unreachable";
+  return "bad_response";
+}
+
+function fallbackError(first, last) {
+  return TRANSIENT.has(last) && first !== last ? "all_unavailable" : last;
+}
+
+// Decode incrementally, dispatching SSE records after the blank line (or at EOF).
+function createSseParser() {
+  const decoder = new TextDecoder();
+  let buffer = "", event = "", data = [];
+  function split(chunk, eof = false) {
+    buffer += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: !eof });
+    if (buffer.length > 2_000_000) throw failure("bad_response");
+    const records = [];
+    function dispatch() {
+      if (data.length) records.push({ event: event || "message", data: data.join("\n") });
+      event = "";
+      data = [];
+    }
+    const lines = buffer.split(/\r\n|\n|\r(?!$)/);
+    buffer = lines.pop();
+    if (eof && buffer) lines.push(buffer.replace(/\r$/, ""));
+    for (const line of lines) {
+      if (!line) dispatch();
+      else if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) data.push(line.slice(5).replace(/^ /, ""));
+    }
+    if (eof) dispatch();
+    return records;
+  }
+  return { push: split, finish: () => split(new Uint8Array(), true) };
+}
+
+function plainAnalysis(text, side, token) {
+  const player = side === "w" ? "White" : "Black";
+  const opponent = side === "w" ? "Black" : "White";
+  if (token) text = text.replaceAll(token, "");
+  return text
+    .replace(/\bhf_[A-Za-z0-9_-]+\b/g, "")
+    .replace(/<(svg|script|style|iframe)\b[^>]*>[\s\S]*?(?:<\/\1\s*>|$)/gi, "")
+    .replace(/<!--[^]*?(?:-->|$)|<\/?[a-z][^>]*(?:>|$)/gi, "")
+    .replace(/^\s*ANALYSIS:\s*/i, "")
+    .replace(/\bthe (player|opponent)\b/gi, (_, role) => role.toLowerCase() === "player" ? player : opponent)
+    .trim();
+}
+
+function proseMove(text) {
+  const anchors = /\bbest move\s*(?:is\s+|:\s*)|\bclearly\s+/gi;
+  for (const match of text.matchAll(anchors)) {
+    const tail = text.slice(match.index + match[0].length);
+    const candidate = /^(?:[*_`"“]+\s*)?(?:\d+\.(?:\.\.)?\s*)?(?:[*_`"“]+\s*)?([^\s,.;:()\[\]*_`"”]+)/.exec(tail)?.[1];
+    if (chess.isStrictSan(candidate)) return candidate;
+  }
+  return null;
+}
+
+function normalized(out, api, req, server, seconds, token) {
+  const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
+    out[3] && typeof out[3] === "object" && { ...out[3], analysis: out[2] });
+  const pos = chess.parseFen(raw?.fen);
+  if (!raw || typeof raw.analysis !== "string" || !pos ||
+      (raw.best_move_san !== null && typeof raw.best_move_san !== "string")) throw failure("bad_response");
+  const analysis = plainAnalysis(raw.analysis, pos.side, token);
+  const lineUci = raw.critical_line_uci?.[0] ?? raw.critical_line?.legal_steps?.[0]?.uci;
+  const moveSource = typeof raw.move_source === "string" && /^[a-z_]{1,40}$/.test(raw.move_source) ? raw.move_source : "";
+  const prose = proseMove(analysis);
+  let best = null, suggestion = null;
+  if (["best_move", "critical_line"].includes(moveSource) && chess.isStrictSan(raw.best_move_san)) {
+    const uci = [raw.best_move_uci, lineUci].find((u) => chess.sanMatchesUci(raw.best_move_san, u, raw.fen));
+    best = { san: raw.best_move_san, uci: uci ?? null, source: "structured" };
+  } else if (prose && chess.sanMatchesUci(prose, lineUci, raw.fen)) {
+    best = { san: prose, uci: lineUci, source: "prose_verified" };
+  } else if (prose) suggestion = { san: prose, source: "prose_unverified" };
+
+  const evaluation = Number.isFinite(raw.evaluation) ? raw.evaluation : null;
+  const advantaged = (evaluation >= 0) === (pos.side === "w") ? "White" : "Black";
+  const value = (advantaged === "White" ? 1 : -1) * Math.abs(evaluation);
+  const evaluationText = evaluation === null ? null : evaluation === 0 ? "White and Black are even (≈ 0)" :
+    `${advantaged} is ${Math.abs(value) < 1 ? "slightly better" : "better"} (≈ ${value < 0 ? "−" : "+"}${Math.abs(value)})`;
+  const suppliedLine = Array.isArray(raw.critical_line_san) ? raw.critical_line_san.join(" ") : raw.critical_line_san;
+  const line = typeof suppliedLine === "string"
+    ? suppliedLine.replace(/\d+\.(?:\.\.)?/g, " ").trim().split(/\s+/).filter(Boolean)
+    : Array.isArray(raw.critical_line?.legal_steps) ? raw.critical_line.legal_steps.map((step) => step?.san) : [];
+  const criticalLine = line.length && line.every(chess.isStrictSan)
+    ? line.map((san, i) => i && (i + (pos.side === "b")) % 2 ? san : chess.moveLabel(san, raw.fen, i)).join(" ") : null;
+  const positionOk = req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
+    pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played);
+  return { server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
+    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" };
+}
+
+const ALLOWED_KEYS = new Set(["type", "mode", "fen", "moves", "played", "snapshot", "fresh", "prefer"]);
+function validAsk(req) {
+  if (!req || req.type !== "ask" || Object.keys(req).some((key) => !ALLOWED_KEYS.has(key)) ||
+      !["explain", "best"].includes(req.mode) || typeof req.fresh !== "boolean" ||
+      (req.prefer !== undefined && (req.prefer !== "other" || !req.fresh)) ||
+      typeof req.moves !== "string" || req.moves.length > 12000) return false;
+  if (req.mode === "best" ? req.played !== null : !chess.isStrictSan(req.played) || req.played.length > 20) return false;
+  const root = chess.parseFen(req.fen);
+  const snapshot = req.snapshot;
+  if (!root || !["w", "b"].includes(snapshot?.side) || typeof snapshot.placement !== "string" ||
+      snapshot.placement.length > 80 || Object.keys(snapshot).length !== 2) return false;
+  const placement = chess.parseFen(snapshot.placement + " w - - 0 1")?.placement;
+  if (!chess.isPlausibleBoard(root.placement).ok || !chess.isPlausibleBoard(placement).ok) return false;
+  const moves = req.moves ? req.moves.split(" ") : [];
+  const plies = moves.length + Number(req.mode === "explain");
+  return moves.length <= 600 && moves.every((m) => m.length <= 20 && chess.isStrictSan(m)) &&
+    ((root.side === snapshot.side) === (plies % 2 === 0));
+}
+
+function customOrigin(value) {
+  return typeof value === "string" && /^https:\/\/[a-z0-9-]+\.hf\.space$/.test(value) ? value : null;
+}
+
+async function getServers(req, lastServer, tokenState) {
+  const { primary, custom, token, tokenFor } = tokenState;
+  const origin = customOrigin(custom?.origin);
+  const hasCustom = origin && Object.hasOwn(BUILTINS, custom?.api) &&
+    await chrome.permissions.contains({ origins: [origin + "/*"] });
+  const first = primary === "custom" && hasCustom ? "custom" : primary === "hugging-apps" ? primary : "boneyland";
+  const second = first === "boneyland" ? "hugging-apps" : "boneyland";
+  const order = req.prefer === "other" && (lastServer || first) === first ? [second, first] : [first, second];
+  return order.map((name) => {
+    const base = name === "custom" ? origin : BUILTINS[name];
+    return { name, base, api: name === "custom" ? custom.api : name,
+      token: typeof token === "string" && /^hf_[A-Za-z0-9]+$/.test(token) &&
+        (name !== "custom" || (Array.isArray(tokenFor) && tokenFor.includes(base))) ? token : null };
+  });
+}
+
+async function requireResponse(res) {
+  const html = /(?:text\/html|application\/xhtml)/i.test(res.headers.get("content-type") || "");
+  if (!res.ok) throw failure(classify(res.status, await res.text()));
+  if (html) throw failure("asleep");
+}
+
+async function callSpace(space, req, seed, onWaiting, signal) {
+  const ctrl = new AbortController();
+  const cancel = () => ctrl.abort(signal.reason);
+  if (signal.aborted) cancel();
+  signal.addEventListener("abort", cancel, { once: true });
+  let deadline;
+  const arm = (ms) => {
+    clearTimeout(deadline);
+    deadline = setTimeout(() => ctrl.abort(failure("timeout")), ms);
+  };
   const headers = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const url = `${space.base}/gradio_api/call/${space.api}`;
-
-  const start = await fetch(url, { method: "POST", headers, signal, body: JSON.stringify({ data: space.data(fen, moves) }) });
-  if (!start.ok) throw new Error(`Space returned HTTP ${start.status}`);
-  const { event_id } = await start.json();
-
-  const res = await fetch(`${url}/${event_id}`, { headers, signal });
-  if (!res.ok || !res.body) throw new Error(`Space returned HTTP ${res.status}`);
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  let buf = "", event = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += value;
-    let i;
-    while ((i = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, i).trim();
-      buf = buf.slice(i + 1);
-      if (line.startsWith("event:")) {
-        event = line.slice(6).trim();
-        if (event === "heartbeat" || event === "generating") onStatus("thinking");
-      } else if (line.startsWith("data:")) {
-        const raw = line.slice(5).trim();
-        if (event === "complete") return space.parse(JSON.parse(raw));
-        if (event === "error") {
-          let msg = null;
-          try { msg = JSON.parse(raw); } catch { msg = raw; }
-          const err = new Error((msg && (msg.error || msg.message || (typeof msg === "string" && msg))) || "The Space reported an error (often the free GPU quota is used up).");
-          err.fatal = /game is already over/i.test(err.message);
-          throw err;
+  if (space.token) headers.Authorization = "Bearer " + space.token;
+  const init = { headers, signal: ctrl.signal, credentials: "omit", redirect: "error", referrerPolicy: "no-referrer" };
+  const api = space.api === "boneyland" ? "analyse_position" : "analyze";
+  const url = space.base + "/gradio_api/call/" + api;
+  const data = [req.fen, req.moves, 2048, 0.6, seed];
+  if (space.api === "hugging-apps") data.push("Analyze the position carefully and find the best move for player.");
+  try {
+    arm(20000);
+    const start = await fetch(url, { ...init, method: "POST", body: JSON.stringify({ data }) });
+    await requireResponse(start);
+    const text = await start.text();
+    if (/^\s*<(?:!doctype\s+html|html\b)/i.test(text)) throw failure("asleep");
+    let id;
+    try { id = JSON.parse(text)?.event_id; } catch {}
+    if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id) || /\s/.test(id)) throw failure("bad_response");
+    onWaiting();
+    arm(45000);
+    const res = await fetch(url + "/" + id, init);
+    await requireResponse(res);
+    if (!res.body) throw failure("unreachable");
+    const reader = res.body.getReader();
+    const parser = createSseParser();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (value?.byteLength) arm(45000);
+      for (const record of done ? parser.finish() : parser.push(value)) {
+        if (record.event === "error") throw failure(classify(0, record.data));
+        if (record.event === "complete") {
+          try { return JSON.parse(record.data); } catch { throw failure("bad_response"); }
         }
       }
+      if (done) throw failure("unreachable");
     }
+  } catch (err) {
+    throw ctrl.signal.aborted ? ctrl.signal.reason : err.code && Object.hasOwn(CODES, err.code) ? err : failure("unreachable");
+  } finally {
+    clearTimeout(deadline);
+    signal.removeEventListener("abort", cancel);
+    if (!ctrl.signal.aborted) ctrl.abort();
   }
-  throw new Error("The Space closed the connection without an answer.");
 }
 
-// When Queen's structured BEST_MOVE was missing, the Space guesses one from the text, and the guess can
-// contradict the prose. Prefer the move the prose names ("The best move is 3...Be7").
-function fixBestMove(r) {
-  if (!r || r.move_source === "best_move" || r.move_source === "critical_line") return r;
-  const m = /best move is\s+(?:\*\*)?(?:\d+\.+\s*)?([KQRBNa-hO][\w=+#-]*)/i.exec(r.analysis || "");
-  return m ? { ...r, best_move_san: m[1], best_move_uci: null, move_source: "analysis_text" } : r;
-}
+function startExtension() {
+  const protect = () => chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+  const protectedStorage = protect();
+  chrome.runtime.onInstalled.addListener(protect);
 
-async function askQueen(req, onStatus, signal) {
-  const { token = "", primary = "boneyland" } = await chrome.storage.local.get(["token", "primary"]);
-  const order = primary === "hugging-apps" ? ["hugging-apps", "boneyland"] : ["boneyland", "hugging-apps"];
-  let lastErr;
-  for (const name of order) {
-    try {
-      onStatus(`connecting:${name}`);
-      return fixBestMove(await callSpace(SPACES[name], req, token, onStatus, signal));
-    } catch (e) {
-      lastErr = e;
-      if (e.fatal || signal.aborted) break;
-    }
-  }
-  throw lastErr;
-}
-
-chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== "queen") return;
-  const ctrl = new AbortController(); // cancel the Space call when the panel hangs up
-  port.onDisconnect.addListener(() => ctrl.abort());
-  port.onMessage.addListener(async (req) => {
-    const send = (m) => { try { port.postMessage(m); } catch {} };
-    try {
-      const result = await askQueen(req, (status) => send({ status }), ctrl.signal);
-      send({ result });
-    } catch (e) {
-      send({ error: e.message || String(e) });
+  const cache = new Map();
+  const lastServer = new Map();
+  let settingsVersion = 0, active = null, lastStart = -Infinity, lastSeed = DEFAULT_SEED;
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && ["token", "primary", "custom", "tokenFor"].some((key) => key in changes)) {
+      cache.clear();
+      settingsVersion++;
     }
   });
-});
 
-chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
-chrome.runtime.onMessage.addListener((m) => { if (m?.openOptions) chrome.runtime.openOptionsPage(); });
+  function senderAllowed(sender) {
+    return sender?.id === chrome.runtime.id && sender.frameId === 0 &&
+      /^https:\/\/(?:www\.chess\.com|lichess\.org)\//.test(sender.url || "");
+  }
+  function send(client, data) {
+    try { client.port.postMessage(data); } catch {}
+  }
+  function report(job, status, server = job.server) {
+    job.status = { status, server };
+    for (const client of job.clients) send(client, job.status);
+  }
+  function keepResult(job, result) {
+    for (const client of job.clients) {
+      if (lastServer.size >= 64) lastServer.delete(lastServer.keys().next().value);
+      lastServer.set(client.tab, result.server);
+      send(client, { result });
+    }
+  }
+
+  async function run(job) {
+    const { req, ctrl, last } = job;
+    const signal = ctrl.signal;
+    const overall = setTimeout(() => ctrl.abort(failure("timeout")), 150000);
+    const keepalive = setInterval(() => {
+      for (const client of job.clients) send(client, { status: "keepalive", server: job.server });
+    }, 20000);
+    const waiting = setTimeout(() => report(job, "still_waiting"), 60000);
+    const started = Date.now();
+    try {
+      await protectedStorage;
+      const version = settingsVersion;
+      const servers = await getServers(req, last, await chrome.storage.local.get(["primary", "custom", "token", "tokenFor"]));
+      job.server = servers[0].name;
+      signal.throwIfAborted();
+      const key = JSON.stringify([job.key, servers.map(({ name, base, api }) => [name, base, api]), version]);
+      const hit = cache.get(key);
+      if (!req.fresh && hit && Date.now() - hit.time < 900000) {
+        cache.delete(key);
+        cache.set(key, hit);
+        keepResult(job, { ...hit.result, cached: true });
+        return;
+      }
+      if (hit) cache.delete(key);
+      const delay = 2000 - (Date.now() - lastStart);
+      if (delay > 0) await new Promise((resolve) => {
+        const timer = setTimeout(resolve, delay);
+        signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
+      signal.throwIfAborted();
+      lastStart = Date.now();
+      let seed = DEFAULT_SEED;
+      if (req.fresh) {
+        do { seed = crypto.getRandomValues(new Uint32Array(1))[0] & 0x7fffffff; }
+        while (seed === lastSeed || seed === DEFAULT_SEED);
+        lastSeed = seed;
+      }
+      let firstError;
+      for (const [i, space] of servers.entries()) {
+        job.server = space.name;
+        report(job, i ? "backup" : "connecting");
+        try {
+          const out = await callSpace(space, req, seed, () => { if (!i) report(job, "waiting"); }, signal);
+          signal.throwIfAborted();
+          const result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, space.token);
+          if (!req.fresh && result.positionCheck === "ok" && version === settingsVersion) {
+            cache.set(key, { result, time: Date.now() });
+            if (cache.size > 32) cache.delete(cache.keys().next().value);
+          }
+          keepResult(job, result);
+          return;
+        } catch (err) {
+          signal.throwIfAborted();
+          if (i) throw failure(fallbackError(firstError, err.code));
+          if (!TRANSIENT.has(err.code)) throw err;
+          firstError = err.code;
+        }
+      }
+    } catch (err) {
+      const code = Object.hasOwn(CODES, err?.code) ? err.code : "bad_response";
+      for (const client of job.clients) send(client, { error: { code, detail: CODES[code] } });
+    } finally {
+      clearTimeout(overall);
+      clearInterval(keepalive);
+      clearTimeout(waiting);
+      if (active === job) active = null;
+    }
+  }
+
+  chrome.runtime.onConnect.addListener((port) => {
+    if (port.name !== "queen" || !senderAllowed(port.sender)) { port.disconnect(); return; }
+    const client = { port, tab: port.sender.tab?.id };
+    let job, used = false;
+    port.onDisconnect.addListener(() => {
+      if (!job) return;
+      job.clients.delete(client);
+      if (!job.clients.size) job.ctrl.abort(failure("cancelled"));
+    });
+    port.onMessage.addListener((req) => {
+      if (used) return;
+      used = true;
+      if (!validAsk(req)) { send(client, { error: { code: "illegal_position", detail: CODES.illegal_position } }); return; }
+      // The panel passes SAN as the page shows it ("Qh4#"); the Space gets it without check and annotation marks.
+      req = { ...req, moves: req.moves && req.moves.split(" ").map(chess.stripSan).join(" "),
+        played: req.played && chess.stripSan(req.played) };
+      const last = lastServer.get(client.tab);
+      const key = JSON.stringify([req.mode, req.fen, req.moves, req.played, req.snapshot.placement, req.snapshot.side,
+        req.prefer ? last ?? true : null]);
+      if (active && !active.ctrl.signal.aborted) {
+        if (active.key === key && active.req.fresh === req.fresh) {
+          job = active;
+          job.clients.add(client);
+          if (job.status) send(client, job.status);
+        } else send(client, { error: { code: "busy", detail: CODES.busy } });
+        return;
+      }
+      job = active = { req, key, last, ctrl: new AbortController(), clients: new Set([client]), server: "boneyland" };
+      void run(job);
+    });
+  });
+
+  chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+  chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+    if (!senderAllowed(sender) || !["getPrefs", "setPrefs", "openOptions"].includes(msg?.type)) return;
+    (async () => {
+      await protectedStorage;
+      if (msg.type === "openOptions") return chrome.runtime.openOptionsPage();
+      if (msg.type === "getPrefs") {
+        const { dock, firstUseSeen } = await chrome.storage.local.get(["dock", "firstUseSeen"]);
+        return { dock: dock === "left" ? "left" : "right", firstUseSeen: firstUseSeen === true };
+      }
+      const prefs = {};
+      if (["left", "right"].includes(msg.prefs?.dock)) prefs.dock = msg.prefs.dock;
+      if (typeof msg.prefs?.firstUseSeen === "boolean") prefs.firstUseSeen = msg.prefs.firstUseSeen;
+      await chrome.storage.local.set(prefs);
+      return { ok: true };
+    })().then((value) => respond(value), () => respond(null));
+    return true;
+  });
+}
+
+if (typeof chrome !== "undefined" && chrome.runtime) startExtension();
+if (typeof module !== "undefined") module.exports = { createSseParser, classify, fallbackError, normalized, proseMove,
+  plainAnalysis, validAsk, customOrigin, callSpace, CODES };
