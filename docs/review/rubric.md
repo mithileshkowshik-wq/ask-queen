@@ -97,7 +97,7 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - The source-precedence rule in §4.5 is followed. Only a **verified** move becomes the headline or is used for the agree/disagree verdict. An unverified prose move is shown only as "Queen's text suggests X (unverified)". A `random_legal_fallback` move is never presented as Queen's.
   - When an evaluation is supplied, it names a side. When a critical line is supplied, it is numbered SAN. When either is missing, its row is left out.
   - "the player / the opponent" is mapped to White/Black.
-  - Truncation is flagged at the top, with "Try the other server".
+  - Truncation is flagged directly under the headline, with "Try the other server".
   - Both Space formats render the same card.
   - The recorded truncated reply renders the exact card given in §4.5.
 - **10:** Everything in 9, plus a regression fixture for every `move_source` value and both `finish_reason` values, each with a screenshot.
