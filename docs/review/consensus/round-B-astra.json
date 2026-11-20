@@ -1,0 +1,73 @@
+{
+  "reviewer": "gpt-6.2-astra",
+  "approve": false,
+  "required_changes": [
+    {
+      "doc": "rubric.md",
+      "section": "Scoring procedure 1 and C1–C9",
+      "change": "Make the anchors monotonic and give reviewers one deterministic rule for intermediate scores. Define the condition-counting unit and how to score a missing lower anchor, or restrict scores to explicitly defined anchors.",
+      "why": "C9 requires absent or ineffective tests at 3 and passing tests at 6. C1 requires a silent wrong-position path at 3, and C6 requires a security or fair-play defect. Under the cumulative rule, fixing those defects prevents a higher score. The half-point rule also leaves 8.5 and 9.5 undefined, which can change whether H9 applies."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§3.1–3.3 and rubric C1",
+      "change": "Define what positively verifies a standard root. For a known custom root, calculate material and turn from that FEN, and skip the last-move check at zero plies. Assign known-root custom Explain to one scoring level consistently.",
+      "why": "A Black-to-move three-piece study can have a perfectly valid line. The mandatory check against 32 minus captures rejects it before sending. Section 3.2 already requires sending a known root plus moves, while C1 lists custom-start Explain as a level-10 addition. The listed signs of a custom start also leave reviewers without a pass condition for an unmarked root."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§3.1–3.3, 3.6 and 11",
+      "change": "Define Explain by its pre-move position throughout. Offer it only when the played move and preceding position are known. Apply the terminal-position block to Best move at the terminal board. Check Best move replies against the click-time placement and side, and require an Explain reply to be consistent with the selected move leading to the displayed board. Test both modes with position-matched replies.",
+      "why": "The current terminal rule blocks explaining a mating move from its valid preceding position. The Best move check accepts the opposite side on identical pieces. For Explain 3.Bc4, a reply with the bishop already on c4 and White to move passes the four-square tolerance even though White cannot play the labelled move from that position. Both recorded replies belong to Black after Bc4."
+    },
+    {
+      "doc": "rubric.md",
+      "section": "C1(9a), H1/H1b and spec §3.7",
+      "change": "Define the expected outcome by fixture type. For a send, assert the full outbound six-field root FEN and ordered moves. For a gated or unreadable position, assert the expected UI and zero requests. Make H1 and H1b mutually exclusive for overlapping fixture and core-flow descriptions.",
+      "why": "C1 demands complete FENs for the entire matrix, §3.7 allows FEN or moves, and a gated fixture must produce no outbound FEN at all. A custom-start lichess study with a selected variation also fits both CF2 and the named non-core custom-start case, giving the same wrong-root request a possible cap of either 5.0 or 7.0."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§4.1, 4.3 and 11, and rubric C2",
+      "change": "Use separate timeout and worker-lifetime tests. A fully silent stream must time out at 45 seconds. For the 90-second survival test, keep the mock connection open with transport heartbeats inside that deadline, delay the answer, and require the original attempt to complete. Allow deterministic synthetic fixtures for hangs and injected failures.",
+      "why": "The required 45-second timeout aborts the same stream the E2E is supposed to keep alive for 90 seconds. A successful backup would prove fallback, not survival of the original request."
+    },
+    {
+      "doc": "rubric.md",
+      "section": "C3, H7 and spec §§3.2, 4.5 and 5.2",
+      "change": "Distinguish SAN syntax from legality in the analyzed position. Keep H7 for an illegal headline and require a position-based legality check or withholding the headline and agreement verdict. Define source precedence when a Space supplies a guessed SAN that conflicts with its prose. Require evaluation and critical-line formatting when those fields are supplied, with an explicit absent-data outcome.",
+      "why": "The required regex accepts `Qh5` from the initial position even though the pawn on e2 blocks the queen. Passing that regex can therefore satisfy the stated prose check and still trigger H7. The truncated recording also contains a guessed `d5`, recommends `Be7` in prose, and has a null evaluation. Reviewers need one expected card for that actual response."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§2 and 5.1",
+      "change": "Give separate expected UI and request outcomes for entering an unsupported variant directly and navigating there with the panel already open. Apply the same distinction to an ongoing game, including any in-flight or previously displayed answer.",
+      "why": "The state inventory requires both a hidden launcher on variants and an unsupported-variant panel, while §2 directs the extension to show a message. Without an entry condition, reviewers cannot tell which screenshot should pass or when a previous answer must disappear."
+    },
+    {
+      "doc": "rubric.md",
+      "section": "H3 and H5, and spec §§1 and 4.7",
+      "change": "Scope the token reveal control to newly entered text or remove it, and explicitly prohibit revealing a stored token. Distinguish the declared optional HF Space pattern from the permission actually granted. Require an exact selected HTTPS origin at runtime, with a separate credential decision for a new recipient, and apply H5 to an unnecessarily broad grant.",
+      "why": "The required Show control can trigger H3's 4.0 cap under its literal wording. Likewise, §1 requires an optional wildcard declaration while H5 caps a broad permission without saying whether it judges the declaration or the granted access. The difference determines whether a least-privilege implementation passes."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§§6, 7 and 11, and rubric C5",
+      "change": "Require evidence that the accessibility scan inspected controls inside the closed shadow root. For example, assert that the scan includes a known panel control and that a deliberately unnamed test control is detected.",
+      "why": "A page-level axe scan can report zero serious issues while inspecting none of the extension panel. With a closed root mandated, a green count alone can award C5 credit for an untested interface."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§9 and rubric C7(10)",
+      "change": "Permit `_locales/` in the release ZIP allowlist when the extension uses the level-10 localization feature, and verify the locale file in the extracted ZIP.",
+      "why": "The exact §9 allowlist excludes the directory that C7 adds at 10. A reviewer scoring the shipped ZIP cannot require both."
+    },
+    {
+      "doc": "spec.md",
+      "section": "§10 and rubric scoring procedure 5, C1, C9 and H8",
+      "change": "Make the dated owner check mandatory on live chess.com and state that a live lichess check is optional. Keep the lichess fixture and E2E requirements mandatory.",
+      "why": "The brief, owner-step rule and H8 identify live chess.com as the required manual evidence. Section 10 requires dated owner checks on both sites, and C9 imports all of §10. That creates a second owner dependency that can independently block a 9."
+    }
+  ],
+  "optional_suggestions": []
+}

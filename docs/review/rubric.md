@@ -1,11 +1,26 @@
-# Ask Queen: scoring rubric (v1, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
+# Ask Queen: scoring rubric (v2, merged from the Opus 5.5, Fable 5.2 and GPT-6.2-astra drafts)
 
 A **9** means "ready to submit to the Chrome Web Store, and a serious club player would trust it". The target behaviour is defined in [`spec.md`](spec.md), which this rubric cites by section (§).
 
 ## Scoring procedure
-1. Score each criterion from 0 to 10 in steps of 0.5. **Anchors are cumulative.** A level is earned only when every condition of that level and of all lower levels is met.
-   - 7–8 means all of the 6 conditions plus at least half (7) or all but one (8) of the 9 conditions.
-   - 4–5 means all of the 3 conditions plus part of the 6 conditions.
+1. Score each criterion from 0 to 10 in steps of 0.5.
+   - **Levels 6, 9 and 10** are lists of positive **conditions**. Each bullet or lettered item counts as one condition. A level is earned only when every condition at that level and at the levels below it is met.
+   - **The text at level 3** only describes what such a build typically looks like. It is not a requirement. Any build that meets all the level-6 conditions scores at least 6, whatever the level-3 text says.
+   - **The table below is the only rule for scores that fall between anchors.**
+
+   | Score | Rule |
+   |---|---|
+   | 0–2 | Doesn't even fit the level-3 description (for example, the feature is missing). |
+   | 3 | Fits the level-3 description. |
+   | 4–5 | Some of the level-6 conditions are met: 4 for under half, 5 for half or more. |
+   | 6 | All level-6 conditions are met. |
+   | 6.5 | Level 6, plus at least one level-9 condition. |
+   | 7 | Level 6, plus at least half of the level-9 conditions. |
+   | 8 | Every level-9 condition but one is met. |
+   | 8.5 | As for 8, and the missing condition is partly met, with evidence. |
+   | 9 | All level-9 conditions are met. |
+   | 9.5 | Level 9, plus at least half of the level-10 conditions. |
+   | 10 | All level-10 conditions are met. |
 2. **No evidence, no credit.** A condition counts as met only when you cite one of these:
    - a passing test name in `docs/review/evidence/round-N/report.json`
    - a `file:line`
@@ -16,7 +31,11 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
    - For every score below 10, cite each unmet condition (with `file:line`, test or screenshot) and state expected versus observed behaviour.
    - For every 9-level condition you claim is met, cite the positive evidence.
 4. **Overall** = Σ(weight × score) / 100, rounded to one decimal. Then apply every triggered cap; the lowest cap wins.
-5. **Owner-only steps** count as met when the artifact is complete and the step is listed in `store/OWNER-TODO.md`. Owner-only steps are hosting the privacy policy URL, the developer account, the dashboard upload, and the decision about the Spaces. The one exception is the live chess.com check, which needs the owner's dated entry in `docs/live-checklist.md`.
+5. **Owner-only steps** count as met when the artifact is complete and the step is listed in `store/OWNER-TODO.md`. Owner-only steps are hosting the privacy policy URL, the developer account, the dashboard upload, and the decision about the Spaces. The one exception is the live **chess.com** check, which needs the owner's dated entry in `docs/live-checklist.md`. A live lichess check is optional, because the lichess fixtures and E2E stay mandatory.
+   - **Fixture expectations depend on the fixture type.**
+     - A fixture that **sends** asserts the full outbound request: the root FEN (all six fields) plus the ordered SAN moves.
+     - A **gated or unreadable** fixture asserts the expected UI and **zero** requests.
+   - **Shadow-DOM evidence.** Accessibility and E2E evidence about the panel counts only if it can be shown to have acted on nodes inside the panel's shadow root.
 6. **Fixed constraints. Do not penalize these:**
    - The backend is the unofficial community HF Spaces, with their latency and quota.
    - QUEEN needs a GPU and cannot run locally.
@@ -44,10 +63,11 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - board fallback with the side buttons
   Variation and custom-start pages either work or fall back visibly.
 - **9:** Every one of the following, each with a named test:
-  - (a) The §3.7 fixture matrix passes, with at least 12 fixtures per site and **complete expected FENs** (all six fields).
+  - (a) The §3.7 fixture matrix passes, with at least 12 fixtures per site, each asserted according to its fixture type (procedure step 5).
   - (b) Strict SAN validation (§3.2). Any token that fails discards the whole list, and nothing is "cleaned" into a different move.
   - (c) Moves are never replayed from the standard start unless that start is verified (§3.2).
-  - (d) The pre-send cross-check and the post-response `fen` check both run (§3.3). A mismatch falls back visibly and is never sent silently.
+  - (d) The pre-send cross-check and the post-response `fen` check both run (§3.3). The post-response check compares against the snapshot taken at click time. A mismatch falls back visibly and is never sent silently.
+  - (d2) When the page exposes the root FEN (for example a lichess `[FEN]` tag), a custom-start Explain sends that root plus the moves (§3.2).
   - (e) Board-scan hygiene (§3.4): animation and drag pieces are ignored, impossible boards are rejected, last-move squares only, main board only.
   - (f) The request is rebuilt from a fresh read at click time and matches the button label (§3.5).
   - (g) The side to move is never silently defaulted, and its source is shown with a one-click switch.
@@ -56,8 +76,7 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
 - **10:** Everything in 9, plus:
   - a full SAN replay that reproduces the scanned placement exactly
   - chess.com variations read as lines
-  - custom-start Explain using the start FEN plus moves
-  - zero mismatches on 5 adversarial fixtures the reviewer writes
+  - zero mismatches on 5 adversarial fixtures the reviewer writes, limited to realistic site DOM (recorded or lila-derived markup)
 
 ### C2. QUEEN client reliability and courtesy (13)
 - **3:** The happy path works on one Space. There are no timeouts, errors are shown raw or classified by regex on English text, and the client falls back on every error.
@@ -70,7 +89,7 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - one request in flight per browser, and duplicate clicks coalesced
   - a bounded session cache, with "Ask again" bypassing it with a new seed
   - an overall deadline of 150 s or less, with a "still waiting" message at 60 s
-  - the service worker survives a long silent stream (E2E)
+  - two separate E2E tests: a stream of heartbeats only, lasting 90 s and then completing, still delivers its answer; and a stream with no bytes at all ends in `timeout` at 45 s
   - a configurable custom server through an optional host permission, and the result names the server that answered
 - **10:** Everything in 9, plus `Retry-After` is honoured and shown, a "both servers unavailable" state links to custom-server setup, and duplicate asks from two tabs produce one GPU job.
 
@@ -81,13 +100,12 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - The best move is shown in SAN with the correct number and side.
   - `sameMove` normalizes castling, check and mate marks, glyphs and promotion.
   - On disagreement, the copy says the played move was not analysed.
-  - A move from `random_legal_fallback`, or from the prose that fails strict SAN, is **never** the headline.
-  - A prose-derived move is labelled "taken from Queen's text".
-  - The evaluation names a side.
+  - The source-precedence rule in §4.5 is followed. Only a **verified** move becomes the headline or is used for the agree/disagree verdict. An unverified prose move is shown only as "Queen's text suggests X (unverified)". A `random_legal_fallback` move is never presented as Queen's.
+  - When an evaluation is supplied, it names a side. When a critical line is supplied, it is numbered SAN. When either is missing, its row is left out.
   - "the player / the opponent" is mapped to White/Black.
-  - The critical line is numbered SAN.
   - Truncation is flagged at the top, with "Try the other server".
   - Both Space formats render the same card.
+  - The recorded truncated reply renders the exact card given in §4.5.
 - **10:** Everything in 9, plus a regression fixture for every `move_source` value and both `finish_reason` values, each with a screenshot.
 
 ### C4. Panel UX and copy (10)
@@ -113,12 +131,12 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
   - Targets are at least 24×24 px.
   - State is never shown by colour alone.
   - The layout works at 200% zoom and at 320 px width.
-  - axe reports zero serious or critical issues in every state.
+  - axe reports zero serious or critical issues in every state. The scan must provably include the panel's nodes: it lists a known panel control, and a deliberately unnamed test control planted in the panel is detected.
   - The options page meets the same bar.
 - **10:** Everything in 9, plus a documented screen-reader walkthrough with no blockers, and an `Alt+Q`-style `commands` shortcut.
 
 ### C6. Security, privacy and fair play (10)
-- **3:** Unescaped sinks, a token readable by content scripts, a wildcard host permission, or UI shown during games in progress.
+- **3:** Unescaped sinks, a token readable by content scripts, a wildcard in the **required** `host_permissions`, or UI shown during games in progress.
 - **6:** All untrusted text goes through `textContent` or the escape-first renderer, with a test. The token is stored locally and sent only to the Queen servers over HTTPS. Only FEN, moves and generation parameters are sent. The UI says the servers are third-party.
 - **9:** All of §2 and §7:
   - The fail-closed fair-play gating matrix is tested (§2).
@@ -132,7 +150,7 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
 - **10:** Everything in 9, plus a renderer that builds DOM nodes with no `innerHTML`, a one-page threat model, and a reviewer who cannot get mid-game help in 5 adversarial tries.
 
 ### C7. Chrome Web Store readiness (12)
-- **3:** It loads unpacked as MV3 with no remote code, but there is no privacy policy, no package script and no listing material, or the host permission is a wildcard.
+- **3:** It loads unpacked as MV3 with no remote code, but there is no privacy policy, no package script and no listing material, or the **required** host permission is a wildcard.
 - **6:** Host permissions are exact, there is an allowlist package script, and there are draft versions of the privacy policy, listing and non-affiliation line.
 - **9:** All of §9:
   - A zip-content test passes, and the extracted zip loads cleanly.
@@ -169,13 +187,13 @@ A **9** means "ready to submit to the Chrome Web Store, and a serious club playe
 | ID | Condition | Cap |
 |---|---|---|
 | H1 | A core flow silently sends QUEEN a position (placement, side, castling, en passant, move list or root) that differs from the board the user is looking at for the labelled ask. A castling or en-passant value that the board fallback shows to the user as a guess (spec §3.4) does not count as silent. | **5.0** |
-| H1b | The same, in a non-core flow (custom start, Chess960 or variant, mid-animation, mini-board, localized notation). | **7.0** |
+| H1b | The same, in one of these named situations: custom start, Chess960 or variant, mid-animation, mini-board, localized notation. When a case matches both H1 and H1b, H1b applies (the two are mutually exclusive). Board-fallback clocks of `0 1` never trigger H1 or H1b. | **7.0** |
 | H2 | Model, site or server text reaches an HTML, attribute or URL sink unescaped, or remote code is run. | **4.0** |
-| H3 | The HF token goes anywhere other than the configured Queen servers, or is logged, synced, shown in full, or readable by content scripts. | **4.0** |
+| H3 | The HF token goes anywhere other than the configured Queen servers. Also: the token is logged or synced, or is readable by content scripts. Also: the token is displayed anywhere except as text the user is typing into the options field. A stored token may show only its last 4 characters. | **4.0** |
 | H4 | A crash or dead end in a core flow: an uncaught exception that breaks the panel, a state with no way out short of reloading, or a wait with no deadline and no cancel. | **5.0** |
-| H5 | A Chrome Web Store blocker: remote code; a missing privacy policy or disclosure for FEN, moves and the token going to third parties; an unjustified or broad permission; a listing or icon that implies endorsement by Chess.com, Lichess, Princeton or Hugging Face; test or docs files in the zip. | **5.0** |
+| H5 | A Chrome Web Store blocker: remote code; a missing privacy policy or disclosure for FEN, moves and the token going to third parties; an unjustified or broad **required** permission, or a **granted** optional permission broader than the one exact origin the user chose; a listing or icon that implies endorsement by Chess.com, Lichess, Princeton or Hugging Face; test or docs files in the zip. The **declared** `optional_host_permissions: ["https://*.hf.space/*"]` that spec §1 requires does not trigger H5 or the level-3 anchors, as long as it is justified in `store/`. | **5.0** |
 | H6 | Fair play: any UI path to a QUEEN answer on a page showing a game in progress (live, daily or correspondence) or an unsolved puzzle. | **5.0** |
-| H7 | A random server-picked move, or a prose-derived token that is not legal SAN, is presented as "Queen plays / prefers X". | **6.0** |
+| H7 | A move that isn't **verified** under spec §4.5 is presented as "Queen plays / prefers X", or is used for the agree/disagree verdict. That includes a random server-picked move and an unverified prose move. | **6.0** |
 | H8 | No passing automated tests → **6.0**. No Playwright E2E on the unpacked extension, or no screenshot per state → **7.5**. No dated owner live chess.com check → **8.5**. | as listed |
 | H9 | Any criterion below 5 → **6.9**. Any criterion below 7 → **8.5**. C1, C3, C7 or C9 below 9 → **8.9**. | as listed |
 
