@@ -159,7 +159,10 @@ const ANALYSIS_CAP = 20000; // characters of provider prose kept; the recordings
 const EVAL_CAP = 2000, LINE_CAP = 4000;
 function normalized(out, api, req, server, seconds, token) {
   // Every provider string is capped before any regex work, so a 2 MB reply can't hold up the worker.
-  out = invisible(deep(out, (s) => s.slice(0, ANALYSIS_CAP))); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
+  // Arrays over 512 entries (real lines are under 50 plies) are dropped, not walked or cut.
+  const capped = (v) => typeof v === "string" ? v.slice(0, ANALYSIS_CAP) : Array.isArray(v) ? (v.length > 512 ? null : v.map(capped)) :
+    v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capped(x)])) : v;
+  out = invisible(capped(out)); // zero-width, word-joiner, BOM and soft-hyphen characters can't hide anything
   const raw = Array.isArray(out) && (api === "boneyland" ? out[0] :
     out[3] && typeof out[3] === "object" && { ...out[3], analysis: out[2] });
   const pos = chess.parseFen(raw?.fen);
