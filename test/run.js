@@ -7,6 +7,7 @@ const { execFileSync } = require("node:child_process");
 const { runUnits } = require("./unit");
 const { runWorkerTests } = require("./worker");
 const { runPanelTests } = require("./panel");
+const { runFormatTests } = require("./format");
 const { runBrowser } = require("./browser");
 const { payload } = require("./mock");
 const { SITES } = require("./fixtures");
@@ -104,7 +105,7 @@ async function staticTests(temp) {
   try {
     const packaged = await staticTests(temp);
     const local = [];
-    for (const suite of [runUnits, runWorkerTests, runPanelTests]) suite((name, fn) => local.push([name, fn]));
+    for (const suite of [runUnits, runFormatTests, runWorkerTests, runPanelTests]) suite((name, fn) => local.push([name, fn]));
     for (const [name, fn] of local) await test(name, fn);
     await test("Unpacked extension E2E harness on Chromium", () => runBrowser(REPO, temp, out, test, packaged));
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }

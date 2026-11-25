@@ -6,8 +6,9 @@ process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = "1";
 const { chromium } = require("playwright");
 const { createMock, HOSTS } = require("./mock");
 const { selectors, uiFor } = require("./ui");
-const { SITES, XSS, START, OPENING } = require("./fixtures");
+const { SITES, XSS, START, OPENING, RECORDED_FEN, RECORDED_MOVES } = require("./fixtures");
 const { CARDS } = require("./panel");
+const { fakeLanguageModel, BONY_REPLY, bony } = require("./format");
 
 const WAIT = 7000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +64,7 @@ async function launchedSmoke(extension, temp) {
   } finally { await ctx.close(); }
 }
 
+// Evaluates in the content scripts' isolated world: a function (with an optional argument), or an expression string.
 async function isolated(page, cb, arg) {
   const session = await page.context().newCDPSession(page);
   const ids = [];
@@ -81,7 +83,8 @@ async function isolated(page, cb, arg) {
       return false;
     });
     const { result, exceptionDetails } = await session.send("Runtime.evaluate", { contextId,
-      expression: "(" + cb.toString() + ")(" + JSON.stringify(arg ?? null) + ")", awaitPromise: true, returnByValue: true });
+      expression: typeof cb === "string" ? cb : "(" + cb.toString() + ")(" + JSON.stringify(arg ?? null) + ")",
+      awaitPromise: true, returnByValue: true });
     assert(!exceptionDetails, exceptionDetails?.exception?.description);
     return result.value;
   } finally { await session.detach(); }
@@ -1445,6 +1448,83 @@ async function runBrowser(extension, temp, out, test, packaged) {
         assert.deepEqual(seriousOrCritical(result), []);
       } finally { await page.close(); }
     });
+    // --- The answer card (docs/output-format.md): the two places Gemini Nano can run, with a scripted LanguageModel ---
+    {
+      const LANG = { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
+      const probe = `(async () => typeof LanguageModel === "undefined" ? "absent" : String(await Promise.race([
+        LanguageModel.availability(${JSON.stringify(LANG)}).catch((e) => "error " + e.name),
+        new Promise((resolve) => setTimeout(resolve, 2000, "no answer in 2 s"))])))()`;
+      const fake = (plan) => `(${fakeLanguageModel})(${JSON.stringify(plan)})`;
+      const install = (plan) => `(() => {
+        globalThis.aqSavedLanguageModel = Object.getOwnPropertyDescriptor(globalThis, "LanguageModel") || null;
+        Object.defineProperty(globalThis, "LanguageModel", { value: ${fake(plan)}, configurable: true, writable: true });
+      })()`;
+      const restore = `(() => {
+        const saved = globalThis.aqSavedLanguageModel;
+        if (saved) Object.defineProperty(globalThis, "LanguageModel", saved); else delete globalThis.LanguageModel;
+      })()`;
+      const reply = JSON.stringify(BONY_REPLY);
+
+      await test("Browser card: which contexts of this Chromium expose LanguageModel, recorded as evidence", async () => {
+        await withPage("lichess-recorded", async (page) => {
+          const found = { chromium: browser?.version() || null, worker: await (await worker(ctx)).evaluate(probe),
+            contentScript: await isolated(page, probe), page: await page.evaluate(probe) };
+          fs.writeFileSync(path.join(out, "nano-contexts.json"), JSON.stringify(found, null, 2) + "\n");
+          for (const value of Object.values(found).slice(1)) assert.match(value, /^(?:absent|unavailable|downloadable|downloading|available|error \w+|no answer in 2 s)$/);
+        });
+      });
+
+      await test("Browser card, content path: AQ.tidy uses its window's LanguageModel and the worker's real token guard", async () => {
+        await withPage("lichess-recorded", async (page) => {
+          const value = await isolated(page, `(async () => {
+            ${install({ reply })};
+            try {
+              const r = await AQ.tidy(${JSON.stringify(bony)});
+              const attached = { ...r, card: null };
+              const same = (await AQ.tidy(attached)).card === null;
+              return { card: r.card, same, calls: LanguageModel.calls.map((c) => c[0]) };
+            } finally { ${restore}; }
+          })()`);
+          assert.equal(value.card.source, "nano");
+          assert.deepEqual(value.card.why, BONY_REPLY.why);
+          assert.deepEqual(value.card.others.map((o) => o.tag), ["Slightly worse", "Weakest"]);
+          assert.equal(value.same, true);
+          assert.deepEqual(value.calls, ["availability", "create", "clone", "prompt", "destroy"]);
+          const unready = await isolated(page, `(async () => {
+            ${install({ reply, availability: "downloadable" })};
+            try { return { source: (await AQ.tidy(${JSON.stringify(bony)})).card.source, calls: LanguageModel.calls.map((c) => c[0]) }; }
+            finally { ${restore}; }
+          })()`);
+          assert.deepEqual(unready, { source: "rules", calls: ["availability"] }, "create() only when available");
+        });
+      });
+
+      await test("Browser card, worker path: a LanguageModel in the service worker writes the card and the port reports 'tidying'", async () => {
+        await setup("ok");
+        const sw = await worker(ctx);
+        await sw.evaluate(install({ reply, extension: true }));
+        try {
+          await withPage("lichess-recorded", async (page) => {
+            const ask = { type: "ask", mode: "best", fen: START, moves: RECORDED_MOVES.join(" "), played: null,
+              snapshot: { placement: RECORDED_FEN.split(" ")[0], side: "w" }, fresh: true };
+            const seen = await isolated(page, `new Promise((resolve) => {
+              const port = chrome.runtime.connect({ name: "queen" }), seen = [];
+              port.onMessage.addListener((m) => { seen.push(m); if (m.result || m.error) { port.disconnect(); resolve(seen); } });
+              port.postMessage(${JSON.stringify(ask)});
+            })`);
+            assert(seen.some((m) => m.status === "tidying"), JSON.stringify(seen.map((m) => m.status || Object.keys(m))));
+            const { result } = seen.at(-1);
+            assert.equal(result.card.source, "nano");
+            assert.deepEqual(result.card.why, BONY_REPLY.why);
+            assert.deepEqual(result.estimate, { ahead: "w", words: "White is better", number: "+1.51" });
+            assert.deepEqual(result.promising, ["O-O", "c3"]);
+            const calls = await sw.evaluate(() => LanguageModel.calls.map((c) => c[0]));
+            assert.deepEqual(calls, ["availability", "create", "clone", "prompt", "destroy"]);
+          });
+        } finally { await (await worker(ctx)).evaluate(restore); }
+      });
+    }
+
     await test("Browser screenshots pass axe in every displayed panel state", () => assert.deepEqual(aes, []));
     await test("Browser reports no unexpected requests, uncaught errors, or mock mismatches", () => {
       assert.deepEqual(outside, []);

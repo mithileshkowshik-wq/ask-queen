@@ -8,9 +8,10 @@ const F = require("./fixtures");
 const REPO = path.join(__dirname, "..");
 const read = (name) => fs.readFileSync(path.join(REPO, name), "utf8");
 require("../content/chess.js");
+require("../content/format.js");
 const C = globalThis.AQChess;
 const bg = require("../background.js");
-const sources = ["chess", "common", "lichess", "chesscom"].map((s) => [s, read("content/" + s + ".js")]);
+const sources = ["chess", "common", "lichess", "chesscom", "format"].map((s) => [s, read("content/" + s + ".js")]);
 
 function fixtureDoc(name, mutate = (name, source) => source) {
   const f = F.SITES[name];

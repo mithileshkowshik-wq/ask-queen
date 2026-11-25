@@ -2,9 +2,10 @@ const assert = require("node:assert/strict");
 const { makeRequest, read, vm } = require("./unit");
 const F = require("./fixtures");
 const bg = require("../background.js");
+const { fakeLanguageModel } = require("./format");
 const { webcrypto } = require("node:crypto");
 
-const scripts = { chess: read("content/chess.js"), background: read("background.js") };
+const scripts = { "content/chess.js": read("content/chess.js"), "content/format.js": read("content/format.js"), background: read("background.js") };
 const settle = () => new Promise(setImmediate);
 const event = () => {
   const callbacks = [];
@@ -45,7 +46,7 @@ function virtualClock() {
   };
 }
 
-function worker(plan, settings = {}, givePermission = false) {
+function worker(plan, settings = {}, givePermission = false, extra = {}) {
   const clock = virtualClock(), output = [], accesses = [], grants = [], tabMessages = [];
   const runtime = { id: "test-extension", onInstalled: event(), onConnect: event(), onMessage: event(), openOptionsPage() {} };
   const storage = { setAccessLevel: async (level) => accesses.push(level.accessLevel),
@@ -55,7 +56,7 @@ function worker(plan, settings = {}, givePermission = false) {
     permissions: { contains: async ({ origins }) => { grants.push(...origins); return givePermission; } } };
   const sender = { id: runtime.id, frameId: 0, url: "https://lichess.org/analysis", tab: { id: 1 } };
   const h = vm.createContext({ ...clock.globals, chrome, AbortController, TextDecoder, Uint8Array, crypto: webcrypto,
-    importScripts: () => vm.runInContext(scripts.chess, h),
+    importScripts: (...files) => files.forEach((file) => vm.runInContext(scripts[file], h)), ...extra,
     fetch: async (url, init) => {
       init.signal.throwIfAborted();
       const record = { url, init, time: clock.now };
@@ -382,6 +383,57 @@ function runWorkerTests(test) {
     assert.equal(p.last.error.code, "bad_response");
     assert.equal(w.output.length, 1);
     assert.equal(w.output[0].init.redirect, "error");
+  });
+  // The answer card in the worker: where Chrome exposes LanguageModel to the service worker, the card is written there.
+  const ITALIAN_REPLY = JSON.stringify({ why: ["Develops the king's bishop to a natural square."],
+    idea: "Complete development, secure the king and prepare the d5 break." });
+  test("Worker path: with LanguageModel in the worker the card is written there, reported as 'tidying', guarded and cached", async () => {
+    const LM = fakeLanguageModel({ reply: ITALIAN_REPLY, extension: true });
+    const w = worker(normal, {}, false, { LanguageModel: LM });
+    const p = w.open(best);
+    await w.clock.advance(0);
+    assert(p.responses.some((m) => m.status === "tidying"));
+    assert.equal(p.last.result.card.source, "nano");
+    assert.deepEqual(p.last.result.card.why, ["Develops the king's bishop to a natural square."]);
+    assert.equal(LM.calls.filter(([n]) => n === "create").length, 1);
+    const again = w.open(best);
+    await w.clock.advance(2000);
+    assert.equal(again.last.result.cached, true);
+    assert.deepEqual(again.last.result.card, p.last.result.card, "the session cache keeps the card");
+    assert.equal(LM.calls.filter(([n]) => n === "prompt").length, 1);
+    // A model that isn't downloaded: the rules write it, and create() is never called.
+    const idle = fakeLanguageModel({ availability: "downloadable", reply: ITALIAN_REPLY });
+    const v = worker(normal, {}, false, { LanguageModel: idle }), r = v.open(best);
+    await v.clock.advance(0);
+    assert.equal(r.last.result.card.source, "rules");
+    assert.equal(idle.calls.some(([n]) => n === "create"), false);
+  });
+  test("Worker path: a model that never answers gives the rules' card at the 6 s limit", async () => {
+    const w = worker(normal, {}, false, { LanguageModel: fakeLanguageModel({ hang: true }) });
+    const p = w.open(best);
+    await w.clock.advance(5000);
+    assert.equal(p.last.status, "tidying");
+    await w.clock.advance(1000);
+    assert.equal(p.last.result.card.source, "rules");
+    assert.match(p.last.result.card.idea, /^Black's strategic task/);
+  });
+  test("Content path: without LanguageModel in the worker the result has no card, and the guard message checks the content script's card", async () => {
+    const token = "hf_SavedToken1234567890";
+    const w = worker(normal, { token });
+    const p = w.open(best);
+    await w.clock.advance(0);
+    assert.equal(p.responses.some((m) => m.status === "tidying"), false);
+    assert.equal("card" in p.last.result, false);
+    assert.deepEqual(p.last.result.promising, []);
+    const card = { source: "nano", why: ["Fine.", "White keeps SavedToken1234567890."], idea: "", played: null, others: [] };
+    const guarded = await w.message({ type: "guard", result: { analysis: "Fine.", evaluationText: null, criticalLine: null, card } });
+    assert.deepEqual(JSON.parse(JSON.stringify(guarded.card.why)), ["Fine."]);
+    assert.equal(await w.message({ type: "guard", result: { card: { ...card, why: "x" } } }), null);
+    const other = await new Promise((resolve) => {
+      w.chrome.runtime.onMessage.emit({ type: "guard", result: { card } }, { id: "other", frameId: 0, url: "https://lichess.org/" }, resolve);
+      setImmediate(() => resolve("ignored"));
+    });
+    assert.equal(other, "ignored", "only this extension's top-frame content scripts may ask");
   });
   test("Custom origin grants and token consent are checked independently, and other uses the other server", async () => {
     const origin = "https://queentest.hf.space";

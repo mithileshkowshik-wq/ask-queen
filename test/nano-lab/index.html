@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Queen Nano lab</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f7f6f3; --fg: #1d1c1a; --muted: #6b6860; --line: #dcd8cf; --card: #fff;
+    --ok: #1f7a3a; --bad: #b3261e; --code: #efede8; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1a18; --fg: #ecebe7; --muted: #a29e94; --line: #3a3833; --card: #242320;
+    --ok: #6fcf8a; --bad: #ff8a80; --code: #2d2c28; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  p.sub, .muted { color: var(--muted); margin: 0; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0; padding: 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--card); }
+  label { display: grid; gap: 2px; font-size: 13px; color: var(--muted); }
+  input { width: 90px; font: inherit; padding: 4px 6px; }
+  button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--fg); color: var(--bg); cursor: pointer; }
+  button.secondary { background: transparent; color: var(--fg); }
+  button:disabled { opacity: .5; cursor: default; }
+  section.answer { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 14px; margin: 14px 0; }
+  pre { background: var(--code); padding: 8px; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 12.5px; margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  td, th { border-top: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+  .kept { color: var(--ok); font-weight: 600; }
+  .rejected { color: var(--bad); font-weight: 600; }
+  .pill { display: inline-block; padding: 0 8px; border-radius: 99px; border: 1px solid var(--line); font-size: 13px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Ask Queen Nano lab</h1>
+  <p class="sub">Runs <code>content/format.js</code>'s <code>tidy()</code> on recorded Queen answers with this page's real
+    <code>LanguageModel</code> (Chrome's built-in Gemini Nano, web Prompt API). Nothing leaves the device.</p>
+  <div class="bar">
+    <div><div class="muted">Model</div><div id="model">checking…</div></div>
+    <label>Time limit (ms)<input id="timeout" type="number" min="500" step="500" value="6000"></label>
+    <label>Runs per answer<input id="runs" type="number" min="1" max="20" value="1"></label>
+    <button id="run">Run all</button>
+    <button id="copy" class="secondary" disabled>Copy report</button>
+    <button id="download" class="secondary" hidden>Download Gemini Nano</button>
+    <span id="status" class="muted" role="status"></span>
+  </div>
+  <div id="out"></div>
+</main>
+<script src="/content/chess.js"></script>
+<script src="/content/format.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, ...kids) => {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...kids.filter((k) => k != null && k !== false && k !== ""));
+    return node;
+  };
+  const LM = typeof LanguageModel === "undefined" ? null : LanguageModel;
+  const runs = [];
+  let answers = [], availability = "absent";
+
+  async function checkModel() {
+    if (!LM) { $("model").textContent = "LanguageModel is not defined here (Chrome 148+ needed)"; return; }
+    try { availability = await LM.availability(AQFormat.LANG); } catch (e) { availability = "error " + e.name + ": " + e.message; }
+    $("model").textContent = availability;
+    $("download").hidden = !["downloadable", "downloading"].includes(availability);
+  }
+  // Only on a click: create() is what starts Chrome's model download.
+  $("download").onclick = async () => {
+    $("status").textContent = "Downloading…";
+    try {
+      const s = await LM.create({ ...AQFormat.LANG, monitor(m) { m.addEventListener("downloadprogress", (e) => { $("status").textContent = `Downloading ${Math.round(e.loaded * 100)}%`; }); } });
+      s.destroy();
+      $("status").textContent = "Downloaded.";
+    } catch (e) { $("status").textContent = "Download failed: " + e.message; }
+    checkModel();
+  };
+
+  const pretty = (raw) => { try { return JSON.stringify(JSON.parse(raw), null, 2); } catch { return raw; } };
+  const ms = (t) => t == null ? "–" : t + " ms";
+  function render(run) {
+    const { answer, index, of, report: r, card } = run;
+    const checks = el("table", {}, el("tr", {}, ...["Field", "Text", "Result", "Why"].map((h) => el("th", { textContent: h }))),
+      ...r.checks.map((c) => el("tr", {}, el("td", { textContent: c.field }), el("td", { textContent: c.text }),
+        el("td", { className: c.kept ? "kept" : "rejected", textContent: c.kept ? "kept" : "rejected" }),
+        el("td", { textContent: c.reasons.join(", ") }))));
+    return el("section", { className: "answer" },
+      el("h2", { textContent: `${answer.name}${of > 1 ? ` (run ${index}/${of})` : ""}` }),
+      el("p", {}, "Card source ", el("span", { className: "pill", textContent: card ? card.source : "no card" }),
+        r.fallback ? ` · fallback: ${r.fallback}` : ""),
+      el("p", { className: "muted", textContent: `availability ${ms(r.timings.availability)} · session ${ms(r.timings.session)} · prompt ${ms(r.timings.prompt)} · total ${ms(r.timings.total)}` }),
+      el("h3", { textContent: "Nano's raw reply" }), el("pre", { textContent: r.raw == null ? "(none)" : pretty(r.raw) }),
+      r.checks.length ? checks : el("p", { className: "muted", textContent: "No formatter strings were checked." }),
+      el("h3", { textContent: "Final card" }), el("pre", { textContent: JSON.stringify(card, null, 2) }),
+      el("details", {}, el("summary", { textContent: "Prompt sent" }), el("pre", { textContent: r.prompt || "(none)" })));
+  }
+
+  function reportText() {
+    const lines = ["Ask Queen Nano lab report", `Date: ${new Date().toISOString()}`, `Browser: ${navigator.userAgent}`,
+      `LanguageModel: ${LM ? "present" : "absent"}, availability: ${availability}`, `Time limit: ${$("timeout").value} ms`, ""];
+    const count = { nano: 0, mixed: 0, rules: 0, none: 0 };
+    let kept = 0, rejected = 0;
+    for (const { answer, index, of, report: r, card } of runs) {
+      count[card ? card.source : "none"]++;
+      kept += r.checks.filter((c) => c.kept).length;
+      rejected += r.checks.filter((c) => !c.kept).length;
+      lines.push(`== ${answer.name}${of > 1 ? ` (run ${index}/${of})` : ""}`,
+        `source: ${card ? card.source : "no card"}${r.fallback ? ` | fallback: ${r.fallback}` : ""}`,
+        `timings: availability ${ms(r.timings.availability)}, session ${ms(r.timings.session)}, prompt ${ms(r.timings.prompt)}, total ${ms(r.timings.total)}`,
+        `raw: ${r.raw == null ? "(none)" : r.raw}`, "checks:",
+        ...r.checks.map((c) => `  [${c.kept ? "kept" : "rejected"}] ${c.field}: ${JSON.stringify(c.text)}${c.reasons.length ? " | " + c.reasons.join(", ") : ""}`),
+        `card: ${JSON.stringify(card)}`, "");
+    }
+    const prompts = runs.map((r) => r.report.timings.prompt).filter(Number.isFinite);
+    lines.push("== Summary", `runs: ${runs.length} | nano ${count.nano}, mixed ${count.mixed}, rules ${count.rules}, no card ${count.none}`,
+      `strings kept ${kept}, rejected ${rejected}`,
+      `prompt time: ${prompts.length ? `mean ${Math.round(prompts.reduce((a, b) => a + b, 0) / prompts.length)} ms, max ${Math.max(...prompts)} ms` : "–"}`);
+    return lines.join("\n");
+  }
+
+  $("run").onclick = async () => {
+    $("run").disabled = true;
+    $("copy").disabled = true;
+    runs.length = 0;
+    $("out").replaceChildren();
+    const timeoutMs = Math.max(500, +$("timeout").value || 6000), of = Math.min(20, Math.max(1, +$("runs").value || 1));
+    try {
+      for (const answer of answers) {
+        for (let index = 1; index <= of; index++) {
+          $("status").textContent = `Running ${answer.name}…`;
+          let report = null;
+          const result = await AQFormat.tidy(answer.result, { languageModel: LM, timeoutMs, onReport: (r) => { report = r; } });
+          const run = { answer, index, of, report, card: result.card };
+          runs.push(run);
+          $("out").append(render(run));
+        }
+      }
+      $("status").textContent = `Done: ${runs.length} runs.`;
+    } finally {
+      $("run").disabled = false;
+      $("copy").disabled = !runs.length;
+    }
+  };
+  $("copy").onclick = async () => {
+    const text = reportText();
+    try { await navigator.clipboard.writeText(text); $("status").textContent = "Report copied."; }
+    catch {
+      const area = el("textarea", { value: text, rows: 12, style: "width:100%" });
+      $("out").prepend(area);
+      area.select();
+      $("status").textContent = "Clipboard blocked: the report is in the box above, selected.";
+    }
+  };
+
+  fetch("/answers.json").then((r) => r.json()).then((list) => { answers = list; $("status").textContent = `${list.length} answers loaded.`; });
+  checkModel();
+})();
+</script>
+</body>
+</html>

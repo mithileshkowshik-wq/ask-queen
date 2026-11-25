@@ -1,6 +1,6 @@
-if (typeof importScripts === "function") importScripts("content/chess.js");
+if (typeof importScripts === "function") importScripts("content/chess.js", "content/format.js");
 
-const chess = globalThis.AQChess;
+const chess = globalThis.AQChess, format = globalThis.AQFormat;
 const DEFAULT_SEED = 20260823;
 const BUILTINS = {
   boneyland: "https://boneyland-queen-pawn-8.hf.space",
@@ -107,7 +107,10 @@ function scrub(value, token) {
 // and move numbers in a bare critical line. So each string is checked as written and with those dropped. No displayed
 // field, and not the fields joined in display order, may contain any 8 characters in a row of the token's body (nor a
 // long hf_ run). A field that does is replaced; a split across fields clears them all.
+// The answer card's strings count as displayed fields too: one that leaks is dropped, and a card left with no "why"
+// bullet becomes null.
 const SHOWN = ["evaluationText", "criticalLine", "analysis"];
+const cardTexts = (card) => card ? [card.played?.reason, ...card.why, card.idea, ...card.others.map((o) => o.reason)] : [];
 const views = (s) => [s, s.replace(/<\/?(?:PIECE|SQUARE)_[^>\s]*>/g, "").split(/\r?\n/)
   .map((line) => line.replace(/^\s*\d{1,4}[.)]\s+(?=\S)/, "")).join("\n"), s.replace(/\d+\.(?:\.\.)?\s*/g, "")];
 function guard(result, token) {
@@ -116,10 +119,29 @@ function guard(result, token) {
   const runs = body.length >= 8 ? Array.from({ length: body.length - 7 }, (_, i) => body.slice(i, i + 8)) : [];
   const leaks = (s) => views(s || "").some((v) => runs.some((run) => alnum(v).includes(run)) ||
     /hf_[A-Za-z0-9]{24,}/.test(v.replace(/[\s*`~]/g, "")));
-  if (!leaks(SHOWN.map((key) => result[key]).join("\n"))) return result;
-  const one = SHOWN.some((key) => leaks(result[key]));
-  return { ...result, ...Object.fromEntries(SHOWN.filter((key) => result[key] != null && (!one || leaks(result[key])))
-    .map((key) => [key, "[redacted]"])) };
+  const texts = [...SHOWN.map((key) => result[key]), ...cardTexts(result.card)];
+  if (!leaks(texts.join("\n"))) return result;
+  const one = texts.some(leaks);
+  const bad = (s) => s != null && s !== "" && (!one || leaks(s));
+  const out = { ...result, ...Object.fromEntries(SHOWN.filter((key) => bad(result[key])).map((key) => [key, "[redacted]"])) };
+  if (result.card) {
+    const { card } = result, clean = (o) => o && (bad(o.reason) ? { ...o, reason: "" } : o);
+    const why = card.why.filter((s) => !bad(s));
+    out.card = why.length ? { ...card, why, idea: bad(card.idea) ? "" : card.idea, played: clean(card.played), others: card.others.map(clean) } : null;
+  }
+  return out;
+}
+
+// A card the content script wrote (with its own window's LanguageModel, when the worker has none) passes the same
+// scrub and guard here, with the saved token, before the panel shows it. Only the displayed fields cross.
+const GUARD_CAPS = { evaluationText: 2100, criticalLine: 4000, analysis: 20000 };
+function guardFields(fields, token) {
+  if (!fields || typeof fields !== "object" || Array.isArray(fields) ||
+      Object.keys(fields).some((k) => k !== "card" && !Object.hasOwn(GUARD_CAPS, k)) ||
+      Object.entries(GUARD_CAPS).some(([k, max]) => fields[k] != null && (typeof fields[k] !== "string" || fields[k].length > max)) ||
+      !format.validCard(fields.card ?? null)) return null;
+  const picked = { ...Object.fromEntries(Object.keys(GUARD_CAPS).map((k) => [k, fields[k] ?? null])), card: fields.card ?? null };
+  return guard(scrub(picked, token), token);
 }
 
 function proseMove(text) {
@@ -182,8 +204,11 @@ function normalized(out, api, req, server, seconds, token) {
   const positionOk = !!expected && same(raw.fen, expected) && (req.mode === "best" ? chess.verifyBest(raw.fen, req.snapshot) :
     pos.side !== req.snapshot.side && chess.verifyExplain(raw.fen, req.snapshot.placement, req.played) &&
     (castle === undefined || [...castle.replace("-", "")].every((right) => pos.castle.includes(right))));
+  // The answer card's rule-made parts (docs/output-format.md): Queen's own candidate list, legal here, and its estimate.
+  const promising = format.candidates(/^PROMISING_MOVES:[ \t]*(.+)$/m.exec(raw.analysis)?.[1], raw.fen, best?.san);
   return guard(scrub({ server, seconds, cached: false, fen: raw.fen, analysis, best, suggestion, evaluation, evaluationText,
-    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch" }, token), token);
+    criticalLine, truncated: raw.finish_reason === "length", moveSource, positionCheck: positionOk ? "ok" : "mismatch",
+    played: req.mode === "explain" ? req.played : null, promising, estimate: format.estimate(evaluationText) }, token), token);
 }
 
 const ALLOWED_KEYS = new Set(["type", "mode", "fen", "moves", "played", "snapshot", "fresh", "prefer"]);
@@ -393,7 +418,15 @@ function startExtension() {
           report(job, i ? "backup" : "connecting");
           const out = await callSpace(space, req, seed, () => { if (!i) report(job, "waiting"); }, signal);
           signal.throwIfAborted();
-          const result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, saved);
+          let result = normalized(out, space.api, req, space.name, (Date.now() - started) / 1000, saved);
+          // Where Chrome exposes its built-in model to this worker, the card is written here, within 6 s, and guarded
+          // with the token. Otherwise the result goes without a card and the content script writes it (AQ.tidy).
+          if (typeof LanguageModel !== "undefined") {
+            report(job, "tidying");
+            result = await format.tidy(result, { languageModel: LanguageModel, timeoutMs: 6000, signal,
+              guard: (r) => guard(scrub(r, saved), saved) });
+            signal.throwIfAborted();
+          }
           if (!req.fresh && result.positionCheck === "ok" && version === settingsVersion) {
             cache.set(key, { result, time: Date.now() });
             if (cache.size > 32) cache.delete(cache.keys().next().value);
@@ -467,10 +500,14 @@ function startExtension() {
       chrome.tabs.sendMessage(tab.id, { type: "openPanel" }).catch(() => {});
   });
   chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-    if (!senderAllowed(sender) || !["getPrefs", "setPrefs", "openOptions"].includes(msg?.type)) return;
+    if (!senderAllowed(sender) || !["getPrefs", "setPrefs", "openOptions", "guard"].includes(msg?.type)) return;
     (async () => {
       await protectedStorage;
       if (msg.type === "openOptions") return chrome.runtime.openOptionsPage();
+      if (msg.type === "guard") {
+        const { token } = await chrome.storage.local.get("token");
+        return guardFields(msg.result, /^hf_[A-Za-z0-9]+$/.test(token) ? token : null);
+      }
       if (msg.type === "getPrefs") {
         const { dock, firstUseSeen } = await chrome.storage.local.get(["dock", "firstUseSeen"]);
         // The key the user actually bound to "open-panel" in chrome://extensions/shortcuts ("" when unbound).
@@ -490,4 +527,4 @@ function startExtension() {
 
 if (typeof chrome !== "undefined" && chrome.runtime) startExtension();
 if (typeof module !== "undefined") module.exports = { createSseParser, classify, fallbackError, normalized, proseMove,
-  plainAnalysis, scrub, guard, retryAfter, validAsk, customOrigin, callSpace, CODES };
+  plainAnalysis, scrub, guard, guardFields, retryAfter, validAsk, customOrigin, callSpace, CODES };

@@ -20,6 +20,7 @@ async function panelFixture(id, { firstUseSeen = true, mutate = (source) => sour
     sendMessage: async (m) => {
       if (m.type === "getPrefs") return prefsDelay ? new Promise((resolve) => setTimeout(() => resolve({ ...prefs }), prefsDelay)) : { ...prefs };
       if (m.type === "setPrefs") Object.assign(prefs, m.prefs);
+      if (m.type === "guard") return bg.guardFields(m.result, null); // the worker's token guard for AQ.tidy
     },
     connect: ({ name }) => {
       assert.equal(name, "queen");

@@ -8,6 +8,7 @@ This is the shared interface between the **logic work** (GPT-6.2-sol) and the **
 - `manifest.json`
 - `background.js`
 - `content/chess.js` (new)
+- `content/format.js` (answer card, new)
 - `content/common.js`
 - `content/lichess.js`
 - `content/chesscom.js`
@@ -30,8 +31,8 @@ This is the shared interface between the **logic work** (GPT-6.2-sol) and the **
 
 ## Load order
 - **Key guard (fix pass 2):** `content/keyguard.js` is its own `content_scripts` entry with `run_at: "document_start"`, so its window capture listener runs before any site listener. For `keydown`/`keyup`/`keypress` whose `composedPath()` includes the `aq-host` element it calls `stopImmediatePropagation()` (no `preventDefault`, so Tab, Enter and Space keep their default actions), and on Escape inside the open panel it clicks `[data-testid="aq-close"]`. The panel's own key listeners therefore no longer see panel keys; Escape-to-close goes through the Close button's handler.
-- **Content scripts:** `content/chess.js`, then `content/common.js`, `content/lichess.js`, `content/chesscom.js`, and `content/panel.js` last.
-- **Background:** `background.js` loads `content/chess.js` with `importScripts("content/chess.js")`, so `chess.js` must not touch the DOM.
+- **Content scripts:** `content/chess.js`, then `content/common.js`, `content/lichess.js`, `content/chesscom.js`, `content/format.js`, and `content/panel.js` last.
+- **Background:** `background.js` loads `content/chess.js` and `content/format.js` with `importScripts("content/chess.js", "content/format.js")`, so neither may touch the DOM, and `format.js` uses no `chrome.*` API either.
 
 ## `content/chess.js`: pure chess helpers on `globalThis.AQChess`
 These helpers have no DOM access.
@@ -98,7 +99,7 @@ Returns `null` when there is no board at all. Otherwise it returns:
 `fen` is the root FEN (six fields). For Explain, `moves` are the moves *before* the played move. The background validates the request per §1: `sender.id`, the FEN regex, strict SAN, and the length caps.
 
 **Background → panel**, on the same port:
-- `{ status: "connecting" | "waiting" | "still_waiting" | "backup" | "keepalive", server: "boneyland" | "hugging-apps" | "custom" }`
+- `{ status: "connecting" | "waiting" | "still_waiting" | "backup" | "keepalive" | "tidying", server: "boneyland" | "hugging-apps" | "custom" }` (`tidying`: Queen has answered and the worker is writing the answer card, at most 6 s; see "Answer card")
 - `{ result: R }`
 - `{ error: { code, detail, server?, retryAfter?, reason? } }` (fix pass 4: `server` is the server that failed last, and it becomes the tab's last server, so a following `prefer: "other"` asks the other one. `retryAfter` is capped at **600 s** in the background, the single shared cap; the panel shows the number as given) (fix pass 3: a server that sent `Retry-After` rests for that long in the background for every ask and tab. While it rests, a `busy`/`quota` primary answers at once with the remaining `retryAfter` and makes no request; a resting `asleep` primary goes straight to the backup) (`detail` is a plain string; `retryAfter` is seconds from a `Retry-After` header on a 429/503; `reason: "other_tab"` with `code: "busy"` means another tab's ask holds the one-in-flight slot, with `detail` "Another tab is already asking Queen."), where `code` is one of the §4.4 codes: `quota`, `token_rejected`, `unreachable`, `asleep`, `timeout`, `busy`, `illegal_position`, `game_over`, `bad_response`, `cancelled`, `extension_reloaded`, `all_unavailable`.
 
@@ -119,6 +120,18 @@ Every string in `R` and in errors has the saved token, and any `hf_` token-shape
 ```
 `positionCheck` is computed in the background with `verifyBest`/`verifyExplain` against the request's `snapshot`.
 
+**Answer card additions to `R`** (docs/output-format.md):
+```
+played:    SAN | null       // req.played for Explain (check marks stripped), null for Best
+promising: [SAN]            // Queen's PROMISING_MOVES line: strict SAN (the backup server's long-hand converted at R.fen),
+                            // legal in R.fen (AQChess.replay), not R.best, each once, at most 3
+estimate:  { ahead: "w" | "b" | null, words: string, number: string | null } | null
+           // from evaluationText by rule: "White is slightly better" / "+0.21" (U+2212 minus when Black is ahead,
+           // Queen's digits); "About equal" with number null; null for any other wording (show the sentence)
+card?:     Card | null      // present only when the worker wrote it; otherwise the panel gets it from AQ.tidy(R)
+```
+`played`, `promising` and `estimate` are always present and pass `scrub` and `guard` with the rest of `R`.
+
 **Caps (post-round 5).** Before any regex work every provider string is cut to 20,000 characters. An evaluation sentence over 2,000 characters gives no `evaluationText`, and a critical line over 4,000 characters gives no `criticalLine` (dropped, not cut). The markup-stripping regexes are linear (an unclosed comment runs to the end of the text).
 
 **Keyboard shortcut (fix pass 3).** The manifest declares `commands: { "open-panel": { suggested_key: { default: "Alt+Q" } } }`. On that command the background sends `chrome.tabs.sendMessage(tab.id, { type: "openPanel" })` to the active tab, which needs no `tabs` permission. The panel opens on it only when `sender.id` is this extension.
@@ -129,6 +142,32 @@ Every string in `R` and in errors has the saved token, and any `hf_` token-shape
 - `{ type: "setPrefs", prefs }`
 
 The token is never sent to content scripts.
+
+- `{ type: "guard", result: { evaluationText, criticalLine, analysis, card } }` (answer card) returns the same four keys after `scrub` and the final token guard with the saved token, or `null` for any other shape (other keys, a string over its cap, a malformed card). Only `AQ.tidy` sends it.
+
+## Answer card (`content/format.js`, `AQ.tidy`)
+
+**Where Gemini Nano runs.** `background.js` checks `typeof LanguageModel !== "undefined"` after `normalized()`. When the worker has it, the worker posts `{ status: "tidying" }`, writes the card with `AQFormat.tidy` (6 s), guards it with the token and sends `R` with `card` set (and caches it with `R`). When the worker has no `LanguageModel`, `R` goes without a `card` key and the content script writes it with its own window's `LanguageModel` (the web Prompt API, behind the site's permissions policy). Chrome's Prompt API page says the API isn't in Web Workers and is available to top-level windows and their same-origin iframes; Google's extension guidance says it works in the extension service worker; Playwright's Chromium 158 exposes `LanguageModel` in this extension's service worker (`availability()` answers `"unavailable"` there, as it has no model). The browser suite records each context in `docs/review/evidence/round-*/nano-contexts.json`.
+
+**`AQ.tidy(result) -> Promise<result>`** (content scripts, `content/common.js`)
+- Resolves within 6 s and never rejects. A `result` that already has a `card` key (the worker wrote it, or `null`) comes back at once, unchanged.
+- Otherwise it returns `{ ...result, card }`: Gemini Nano's card when this window's `LanguageModel.availability()` is `"available"` and the reply passes validation, the rules' card when the model is missing, not downloaded, slow (5.75 s) or failing, and `card: null` when there is nothing to build (no verified `best`, `positionCheck` not `"ok"`, or no paragraph whose first sentence says "best move is"/"best move:" and names `best`), or when the worker's guard can't be reached. Every card, the rules' included, passes the `guard` message first.
+- `create()` is called only after `availability()` returned `"available"`. Downloading the model is the options page's job (it needs a user gesture).
+
+**`Card`**
+```
+{ source: "nano" | "rules" | "mixed",       // who wrote the strings shown: all Nano, none Nano, or both
+  why: [string],                            // 1 to 3 (a card with none is null)
+  idea: string,                             // "" when none
+  played: { san, tag, reason } | null,      // Explain only: Queen's own paragraph on the played move, when it has one;
+                                            // that move is then not in `others`
+  others: [{ san, tag, reason }] }          // up to 3, Queen's PROMISING_MOVES order, each with a paragraph of its own
+// san: bare SAN (the panel adds ctx.lab()); tag: "Also good" | "Slightly worse" | "Worse" | "Much worse" | "Weakest" | null,
+// always by rule; reason: "" when none. Moves, tags and the estimate are never Nano's.
+```
+Strings are plain text for `text()`: no markup, no line breaks. On a board-only read the panel drops move numbers from them, as it does for the critical line (only removing characters). The final token guard treats every card string as a displayed field: one that leaks is dropped (a reason becomes `""`), a split across fields clears all of them, and a card left without a `why` bullet becomes `null`.
+
+**Validation** of Nano's reply (docs/output-format.md §3): a wrong shape (not JSON, other keys, `why` not 1–3 strings, `others` entries not `{move, reason}`) means the rules write the whole card. Each string is then checked against its own source (why and idea: the best paragraph, the position and the evaluation; a reason: that move's paragraph): length (why 12–90, idea 110, reason 100), moves (and their numbers), squares (named or a source move's target), other numbers, claim words, markup, and token-like text (`hf_`, 20+ letters and digits in a row). A failing string is replaced by the rules' string for that field; when every bullet fails, the rules' bullets are used.
 
 ## Storage
 - `chrome.storage.local` holds `token`, `tokenFor` (a list of origins approved for the token), `primary`, `custom: { origin, api: "boneyland" | "hugging-apps" }`, `firstUseSeen` and `dock`.

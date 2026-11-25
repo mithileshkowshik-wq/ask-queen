@@ -51,6 +51,7 @@
         "content/common.js",
         "content/lichess.js",
         "content/chesscom.js",
+        "content/format.js",
         "content/panel.js"
       ],
       "run_at": "document_idle"
