@@ -51,6 +51,8 @@
   /* Empty live regions stay rendered, so they are in the accessibility tree before their first message.
      The negative margin only cancels the grid gap an empty row would add. */
   form > [role]:empty, section > [role]:empty { margin-top: -14px; }
+  .row label { margin: 0; }
+  progress { flex: 1 1 160px; min-width: 0; height: 10px; accent-color: var(--gold); }
   footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--dim); font-size: 13px; }
   footer p + p { margin-top: 6px; }
   @media (forced-colors: active) {
@@ -143,6 +145,27 @@
         <span id="custom-status" data-testid="opt-custom-status" role="status"></span>
       </div>
     </form>
+  </section>
+
+  <section aria-labelledby="ai-h">
+    <h2 id="ai-h">Chrome's on-device AI <small>(optional)</small></h2>
+    <p class="help">
+      Chrome has a small AI model of its own that runs on your computer. When it is ready, Ask Queen uses it to shorten
+      Queen's answers into a few short points. That happens on this device and nothing extra is sent anywhere.
+      Without it, the short points are picked from Queen's own sentences.
+    </p>
+    <p class="saved" id="ai-state" data-testid="opt-ai-state" tabindex="-1">Checking…</p>
+    <p class="help" id="ai-detail" data-testid="opt-ai-detail"></p>
+    <div class="row" id="ai-get" hidden>
+      <button type="button" id="ai-download" data-testid="opt-ai-download" aria-describedby="ai-detail">Download</button>
+    </div>
+    <div class="row" id="ai-loading" hidden>
+      <label for="ai-progress">Download progress</label>
+      <progress id="ai-progress" data-testid="opt-ai-progress" max="1" value="0"></progress>
+      <span id="ai-percent" data-testid="opt-ai-percent">0%</span>
+    </div>
+    <p id="ai-error" data-testid="opt-ai-error" role="alert"></p>
+    <span id="ai-status" data-testid="opt-ai-status" role="status"></span>
   </section>
 
   <section aria-labelledby="keys-h" id="keys" hidden>

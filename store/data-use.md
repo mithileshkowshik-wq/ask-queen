@@ -32,6 +32,16 @@ only with a separate opt-in for that exact address, and saving a different addre
 These transfers are the extension's single purpose and are disclosed in the first-use notice, in Settings and in the
 privacy policy.
 
+## Processing on the device
+
+After a QUEEN server answers, the extension shortens the answer into a few points inside the browser. It uses Chrome's
+built-in on-device model (the Prompt API, Gemini Nano) when Chrome already has it, and its own fixed rules otherwise.
+This step makes no request and sends nothing, so it adds no data category and no recipient to the answers above, and
+it needs no permission. The model is given the answer as the panel shows it, never the token.
+
+The extension never starts the model download on its own. Settings has a Download button; if the user clicks it,
+Chrome downloads its own model from Google, and nothing from the extension is part of that download.
+
 The developer receives nothing. There is no developer server, no analytics and no advertising.
 
 ## Certifications
@@ -52,3 +62,6 @@ The public URL where `PRIVACY.md` is hosted. See `OWNER-TODO.md`.
 ## Remote code
 
 "No, I am not using remote code."
+
+Chrome's built-in model is a browser feature the extension calls through a web API. It is not code the extension
+loads or runs.

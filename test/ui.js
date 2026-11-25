@@ -4,6 +4,7 @@ const selectors = Object.fromEntries([
   "explain", "side", "side-white", "side-black", "side-switch", "disagree", "game-over", "changed", "cancel",
   "wait", "headline", "analysis", "verdict", "from-text", "truncated", "suggestion", "other-server", "eval", "line", "line-note",
   "result-footer", "stale", "stale-reask", "error", "error-details", "error-action", "ask-again", "status", "live", "reading", "shortcut",
+  "card", "played", "estimate", "why", "main-line", "idea", "others", "no-card", "full", "by", "footer", // the answer card
 ].map((name) => [name, `[data-testid="aq-${name}"]`]));
 
 const rootFor = (document) => document.querySelector(selectors.host)?.shadowRoot;

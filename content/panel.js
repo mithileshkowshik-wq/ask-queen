@@ -90,10 +90,6 @@ h3 { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
 .lead { font-weight: 600; }
 
 .caveat { display: flex; flex-direction: column; gap: 4px; padding-left: 10px; border-left: 3px solid var(--amber); color: var(--amber); font-size: 13px; }
-dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: baseline; }
-dt { color: var(--dim); font-size: 13px; }
-dd { font: 15px/1.45 var(--serif); overflow-wrap: anywhere; }
-dd .sub { display: block; font-family: var(--sans); }
 .md { line-height: 1.6; overflow-wrap: anywhere; }
 .md > * + * { margin-top: 10px; }
 .md h4 { margin-top: 16px; color: var(--gold); font-size: 13px; font-weight: 600; }
@@ -104,11 +100,41 @@ dd .sub { display: block; font-family: var(--sans); }
 summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer; }
 .raw { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
 
+/* The answer card (docs/output-format.md) */
+.card { display: flex; flex-direction: column; gap: 14px; overflow-wrap: anywhere; }
+.card h4 { margin-bottom: 4px; color: var(--gold); font-size: 13px; font-weight: 600; }
+.est { display: flex; align-items: center; gap: 12px; }
+.est p { line-height: 1.35; }
+.moves + .sub { display: block; }
+.chip { flex: none; min-width: 62px; padding: 3px 9px; border: 1px solid var(--ivory); border-radius: 7px; text-align: center; font: 500 17px/1.4 var(--serif); font-variant-numeric: tabular-nums; }
+.chip.w { background: var(--ivory); color: var(--ink); } /* White is ahead: a light chip, so the sign is never the only cue */
+.why { padding-left: 18px; }
+.why li { line-height: 1.45; }
+.why li::marker { color: var(--gold); }
+.why li + li { margin-top: 5px; }
+.moves { font: 15px/1.7 var(--serif); }
+.moves span { display: inline-block; margin-right: 8px; white-space: nowrap; } /* a move number never wraps away from its moves */
+.moves b { color: var(--gold); font-weight: 600; }
+.cands { display: flex; flex-direction: column; gap: 10px; padding: 0; list-style: none; }
+.cand > div, .played > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.cand p, .played p { font-size: 13.5px; line-height: 1.45; }
+.mv { font: 15px/1.45 var(--serif); }
+.tag { padding: 0 7px; border: 1px solid var(--edge); border-radius: 9px; color: var(--dim); font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+.tag.good { border-color: var(--ivory); color: var(--ivory); }
+.tag.bad { border-color: var(--amber); color: var(--amber); }
+.played { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); }
+.played h4 { margin: 0; }
+.played p { margin-top: 4px; }
+.full { padding-top: 12px; border-top: 1px solid var(--line); }
+.full .md { margin-top: 8px; font-size: 13.5px; }
+.note { margin-top: -8px; color: var(--dim); font-size: 12px; line-height: 1.45; }
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 @media (forced-colors: active) {
   .fab, .panel, .btn, .icon { border: 1px solid ButtonText; }
   .btn.on, .btn.primary { border-width: 3px; }
   .disc, .rank { display: none; }
+  .chip, .tag, .played { border: 1px solid CanvasText; }
 }
 `;
 
@@ -561,11 +587,12 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     asking = ctx;
     const id = ++reqId, t0 = Date.now();
     const secs = h("span", { tid: "aq-timer", textContent: "0 s" });
+    const lead = h("p", { className: "lead", textContent: "Queen is thinking…" });
     const hint = h("p", { tid: "aq-wait", className: "sub", textContent: "Usually 15 to 60 seconds." });
     const wait = (state, text) => { outBox.dataset.state = state; hint.textContent = text; };
     show("thinking", {
       before: h("div", { className: "rank", "aria-hidden": "true" }, [...Array(8)].map((_, i) => h("i", { style: `animation-delay:${i * 0.2}s` }))),
-      status: [h("p", { className: "lead", textContent: "Queen is thinking…" }), h("p", { className: "sub", textContent: `${ctx.what}, ${NAME[ctx.who]} to move` }), hint],
+      status: [lead, h("p", { className: "sub", textContent: `${ctx.what}, ${NAME[ctx.who]} to move` }), hint],
       timer: secs, // outside the status region, so the seconds aren't announced
       after: h("button", { tid: "aq-cancel", className: "link", textContent: "Cancel", onclick: cancel }),
     });
@@ -576,19 +603,38 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     }, 1000);
 
     const fail = (code, detail) => { stop(); showError({ code, detail }, ctx); };
+    // Queen has answered, and the card's short sentences are being written on this device, with Chrome's built-in
+    // model or plain rules: by the worker (its "tidying" status), or by AQ.tidy() (content/format.js), which never
+    // rejects, resolves within 6 s and returns a result that already has a card unchanged. The answer is then shown
+    // once and its text is never swapped. Until then the ask is still in flight, so Cancel, closing the panel and
+    // leaving the position all drop it. The status changes only when this takes over a quarter of a second, which
+    // the rules alone never do.
+    let answered = false, slow = 0;
+    const tidying = () => { slow ||= setTimeout(() => { if (id === reqId && port) { lead.textContent = "Queen has answered."; wait("tidying", "Shortening it on this device."); } }, 250); };
+    const tidy = async (r) => {
+      answered = true;
+      tidying();
+      let out = r;
+      try { out = (await (AQ.tidy || (async (x) => x))(r)) || r; } catch {}
+      if (id !== reqId) return; // cancelled or replaced meanwhile
+      stop();
+      showResult(out, ctx);
+    };
     try {
       const p = port = chrome.runtime.connect({ name: "queen" });
       p.onMessage.addListener((m) => {
-        if (id !== reqId) return; // a late reply to an ask that was cancelled or replaced
+        if (id !== reqId || answered) return; // a late reply to an ask that was cancelled or replaced
         if (m.status === "still_waiting") wait("still_waiting", "Still waiting. Free servers queue requests.");
         else if (m.status === "backup") wait("backup", "The first server didn't answer. Trying the backup server.");
+        else if (m.status === "tidying") tidying();
         if (m.status) return;
+        if (m.result && m.result.positionCheck !== "mismatch") return tidy(m.result);
         stop();
         m.result ? showResult(m.result, ctx) : showError(m.error, ctx);
       });
       p.onDisconnect.addListener(() => {
         void chrome.runtime?.lastError;
-        if (id === reqId && port === p) fail(dead() ? "extension_reloaded" : "cancelled", "The connection to the extension closed.");
+        if (id === reqId && port === p && !answered) fail(dead() ? "extension_reloaded" : "cancelled", "The connection to the extension closed.");
       });
       p.postMessage({ type: "ask", ...msg, fresh, ...(prefer && { prefer }) });
     } catch (e) {
@@ -619,6 +665,64 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     if (live.textContent !== text) live.textContent = text;
   }
 
+  // --- the answer card (docs/output-format.md) ---
+  // Who writes what: the move, the estimate, the main line, which other moves are listed and their tags are Queen's
+  // checked data. The short sentences (why, key idea, one reason per move) come from AQ.tidy(), written by Chrome's
+  // on-device model or by plain rules, and are shown as plain text through text(), never as Markdown.
+  const OWN = "The move, the estimate and the line are Queen's own. ";
+  const BY = {
+    nano: "Chrome's built-in AI shortened the rest on this device.",
+    mixed: "Chrome's built-in AI shortened part of the rest on this device, and the other points are Queen's own sentences.",
+    rules: "The rest is picked from Queen's sentences.",
+  };
+  const TAGS = { "Also good": "good", "Slightly worse": "", Worse: "", "Much worse": "bad", Weakest: "bad" };
+  const str = (v) => (typeof v === "string" ? v.trim() : "");
+  // A card that doesn't fit the contract is not shown. The moves listed are r.promising (Queen's own list), each
+  // checked again here as legal in the analysed position; card.others only adds a tag and a reason to them.
+  // card.played is Queen's note on the move that was played (Explain, when Queen prefers another move): it is shown
+  // only for that very move and only when it says something, and the move then leaves the list.
+  function cardOf(r, best, played) {
+    const c = r.card, why = Array.isArray(c?.why) ? c.why.map(str).filter(Boolean).slice(0, 3) : [];
+    if (!best || !why.length || !Object.hasOwn(BY, c.source)) return null;
+    const said = (o, san) => ({ san, tag: Object.hasOwn(TAGS, o?.tag) ? o.tag : null, reason: str(o?.reason) });
+    const note = played && !C.sameMove(best, played) && C.sameMove(c.played?.san, played) ? said(c.played, played) : null;
+    const rated = note?.tag || note?.reason ? note : null;
+    const others = (Array.isArray(r.promising) ? r.promising : [])
+      .filter((san, i, all) => C.isStrictSan(san) && !C.sameMove(san, best) && !(rated && C.sameMove(san, played)) &&
+        all.findIndex((x) => C.sameMove(x, san)) === i && C.replay(r.fen, [san]))
+      .slice(0, 3).map((san) => said((Array.isArray(c.others) ? c.others : []).find((x) => C.sameMove(x?.san, san)), san));
+    return { source: c.source, why, idea: str(c.idea), played: rated, others };
+  }
+  // Queen's estimate, as the worker read it by rule from Queen's evaluation sentence: who is ahead, the words, and
+  // the signed number ("+1.51", or "−0.21" when Black is ahead). It is shown only in the contract's exact wording,
+  // with a sign that matches the side and digits that are in the sentence. Anything else gets no estimate row, and
+  // the sentence is still in Queen's full answer.
+  const AHEAD = /^(White|Black) is (?:(?:slightly|clearly|much|significantly|decisively) )?better$/;
+  function estimateOf(r) {
+    const e = r.estimate, sentence = str(r.evaluationText);
+    if (!e || !sentence || typeof e.words !== "string") return null;
+    if (e.ahead == null) return e.words === "About equal" ? { words: e.words } : null;
+    if (!["w", "b"].includes(e.ahead) || AHEAD.exec(e.words)?.[1] !== NAME[e.ahead]) return null;
+    if (e.number == null) return { words: e.words };
+    const white = e.ahead === "w", m = typeof e.number === "string" && /^([+−-]?)(\d{1,2}(?:\.\d{1,2})?)$/.exec(e.number);
+    if (!m || (m[1] && (m[1] === "+") !== white) || !sentence.includes(m[2])) return null;
+    // The chip is hidden from screen readers, which get "plus 1.51, White is better".
+    return { words: e.words, side: e.ahead, chip: (white ? "+" : "−") + m[2], spoken: `${white ? "plus" : "minus"} ${m[2]}, ` };
+  }
+  // "4.Nxe5 Qf6 5.O-O Ne6": one unbreakable unit per move number. A line without numbers is one unit per move.
+  // Queen's move is marked when the line starts with it. The text is the line, character for character.
+  function lineOf(line, best) {
+    const numbered = /\d\./.test(line), units = [];
+    for (const t of line.trim().split(/\s+/))
+      !numbered || !units.length || units.at(-1).length > 1 || /^\d+\.(?!\.\.)/.test(t) ? units.push([t]) : units.at(-1).push(t);
+    return h("p", { tid: "aq-line", className: "moves" }, units.flatMap((u, i) => {
+      const m = !i && best && /^(\d+\.(?:\.\.)?)?(.+)$/.exec(u[0]);
+      return [i ? " " : "", h("span", {}, m && C.sameMove(m[2], best) ? [m[1], h("b", {}, m[2])] : u[0], u[1] && ` ${u[1]}`)];
+    }));
+  }
+  // A move number in front of a move ("4.Nxe5", "4...Nxf3+"), never a decimal such as "1.51".
+  const unnumbered = (s) => s.replace(/\b\d{1,3}\.(?:\.\.)?\s*(?=[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8]|O-O)/g, "");
+
   function showResult(r, ctx) { // a reply the panel can't render becomes a named error, never a broken panel
     try { renderResult(r, ctx); } catch (e) { showError({ code: "bad_response", detail: `The reply could not be shown: ${e?.message || e}` }, ctx); }
   }
@@ -629,16 +733,21 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
     const title = !best ? "Queen didn't name a clear move" // only a verified move may be the headline or the verdict
       : !played ? `Queen plays ${ctx.lab(best)}`
       : agree ? `Queen agrees with ${ctx.lab(played)}` : `${ctx.lab(played)} was played. Queen prefers ${ctx.lab(best)}.`;
-    const verdict = best && played && (agree ? "This is its explanation."
-      : `This explains ${C.stripSan(best)}. Queen can't judge ${C.stripSan(played)} directly.`);
     const other = r.truncated && h("button", { tid: "aq-other-server", className: "link", textContent: "Try the other server", onclick: () => again(ctx, { fresh: true, prefer: "other" }) });
-    // On a scanned board the real move numbers are unknown, so the critical line counts from the asked position
+    // On a scanned board the real move numbers are unknown, so the main line counts from the asked position
     // ("1...e5 2.Nf3") and says so. It arrives that way when the reply echoes the placeholder clocks that were sent;
-    // a line numbered any other way has numbers nobody can vouch for, and they are dropped.
+    // a line numbered any other way has numbers nobody can vouch for, and they are dropped, from the line and from
+    // the card's sentences alike.
     const counted = !!ctx.bare && /^1\.(?:\.\.)?[^\d\s]/.test(r.criticalLine);
-    const line = ctx.bare && !counted && typeof r.criticalLine === "string" ? r.criticalLine.replace(/\d+\.(?:\.\.)?\s*/g, "") : r.criticalLine;
-    const facts = [["aq-eval", "Evaluation", r.evaluationText], ["aq-line", "Critical line", line, counted && "Numbered from this position"]]
-      .filter(([, , v]) => typeof v === "string" && v.trim());
+    const line = str(ctx.bare && !counted ? str(r.criticalLine).replace(/\d+\.(?:\.\.)?\s*/g, "") : r.criticalLine);
+    const plain = (s) => text(ctx.bare && !counted ? unnumbered(s) : s);
+    const card = cardOf(r, best, played), est = best ? estimateOf(r) : null, sentence = str(r.evaluationText);
+    const rated = card?.played; // Explain, and Queen prefers another move: Queen's note on the played move comes first
+    const verdict = best && played && (agree ? !card && "This is its explanation."
+      : `This explains ${C.stripSan(best)}. ${rated ? `Queen's note on ${C.stripSan(played)} comes first.` : `Queen can't judge ${C.stripSan(played)} directly.`}`);
+    const section = (tid, title, ...kids) => h("section", { tid }, h("h4", { textContent: title }), ...kids);
+    const tag = (o) => o.tag && h("span", { className: `tag ${TAGS[o.tag]}`.trim(), textContent: o.tag });
+    const reason = (o) => o.reason && h("p", {}, plain(o.reason));
     const analysis = h("div", { tid: "aq-analysis", className: "md" }, md(r.analysis || "Queen didn't write an explanation this time."));
     const copy = h("button", { tid: "aq-copy-fen", className: "btn", textContent: "Copy FEN", onclick: async () => {
       try { await navigator.clipboard.writeText(r.fen); copy.textContent = "Copied"; } catch { copy.textContent = "Couldn't copy"; }
@@ -653,14 +762,30 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
       status: h("h3", { tid: "aq-headline", textContent: title }),
       after: [other && h("div", { tid: "aq-truncated", className: "caveat" }, h("p", { textContent: "The answer was cut off." }), other),
         banner,
-      verdict && h("p", { tid: "aq-verdict", className: "sub", textContent: verdict }),
-      r.best?.source === "prose_verified" && h("p", { tid: "aq-from-text", className: "sub", textContent: "This move was taken from Queen's text." }),
-      !best && r.suggestion?.san && h("p", { tid: "aq-suggestion", className: "caveat", textContent: `Queen's text suggests ${ctx.lab(r.suggestion.san)} (unverified)` }),
-      facts.length && h("dl", {}, facts.flatMap(([tid, k, v, note]) => [h("dt", { textContent: k }),
-        h("dd", {}, h("span", { tid, textContent: v }), note && h("span", { tid: "aq-line-note", className: "sub", textContent: note }))])),
-      analysis,
-      row(copy, redo),
-      h("p", { tid: "aq-result-footer", className: "raw", textContent: `Answered by ${SERVER[r.server] || "Queen's server"} in ${Math.round(r.seconds) || 0} s${r.cached ? " · cached" : ""}` })],
+        verdict && h("p", { tid: "aq-verdict", className: "sub", textContent: verdict }),
+        r.best?.source === "prose_verified" && h("p", { tid: "aq-from-text", className: "sub", textContent: "This move was taken from Queen's text." }),
+        !best && r.suggestion?.san && h("p", { tid: "aq-suggestion", className: "caveat", textContent: `Queen's text suggests ${ctx.lab(r.suggestion.san)} (unverified)` }),
+        h("div", { tid: "aq-card", className: "card" },
+          rated && h("section", { tid: "aq-played", className: "played" }, h("div", {}, h("h4", { textContent: `Queen on ${ctx.lab(played)}` }), tag(rated)), reason(rated)),
+          est && h("div", { tid: "aq-estimate", className: "est" },
+            est.chip && deco(`chip ${est.side}`, est.chip),
+            h("div", {}, h("p", {}, est.chip && h("span", { className: "sr", textContent: est.spoken }), est.words),
+              h("p", { className: "sub", textContent: `Queen's estimate after ${ctx.lab(best)}` }))),
+          card && section("aq-why", `Why ${ctx.lab(best)}`, h("ul", { className: "why" }, card.why.map((w) => h("li", {}, plain(w))))),
+          line && section("aq-main-line", "Main line", lineOf(line, best),
+            counted && h("span", { tid: "aq-line-note", className: "sub", textContent: "Numbered from this position" })),
+          card?.idea && section("aq-idea", "Key idea", h("p", {}, plain(card.idea))),
+          card?.others.length > 0 && section("aq-others", "Other moves", h("ul", { className: "cands" }, card.others.map((o) => h("li", { className: "cand" },
+            h("div", {}, h("span", { className: "mv", textContent: ctx.lab(o.san) }), " ", tag(o)), reason(o))))),
+          !card && h("p", { tid: "aq-no-card", className: "sub", textContent: !best && r.suggestion?.san
+            ? "There are no short points, because Queen's move couldn't be checked." : "There are no short points for this answer." }),
+          // Queen's text as it was shown before there was a card, then its evaluation sentence. Open when there is no
+          // card to read first.
+          h("details", { tid: "aq-full", className: "full", open: !card }, h("summary", { textContent: "Queen's full answer" }), analysis,
+            sentence && h("div", { className: "md" }, h("h4", { textContent: "Evaluation" }), h("p", { tid: "aq-eval", textContent: sentence }))),
+          card && h("p", { tid: "aq-by", className: "note", textContent: OWN + BY[card.source] })),
+        row(copy, redo),
+        h("p", { tid: "aq-result-footer", className: "raw", textContent: `Answered by ${SERVER[r.server] || "Queen's server"} in ${Math.round(r.seconds) || 0} s${r.cached ? " · cached" : ""}` })],
     });
     shown = { ctx, banner, reask, lock: [redo, other].filter(Boolean) };
     body.scrollTop = 0;

@@ -7,6 +7,7 @@ const { chromium } = require("playwright");
 const { createMock, HOSTS } = require("./mock");
 const { selectors, uiFor } = require("./ui");
 const { SITES, XSS, START, OPENING } = require("./fixtures");
+const { CARDS } = require("./panel");
 
 const WAIT = 7000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -62,7 +63,7 @@ async function launchedSmoke(extension, temp) {
   } finally { await ctx.close(); }
 }
 
-async function isolated(page, cb) {
+async function isolated(page, cb, arg) {
   const session = await page.context().newCDPSession(page);
   const ids = [];
   session.on("Runtime.executionContextCreated", ({ context }) => {
@@ -80,7 +81,7 @@ async function isolated(page, cb) {
       return false;
     });
     const { result, exceptionDetails } = await session.send("Runtime.evaluate", { contextId,
-      expression: "(" + cb.toString() + ")()", awaitPromise: true, returnByValue: true });
+      expression: "(" + cb.toString() + ")(" + JSON.stringify(arg ?? null) + ")", awaitPromise: true, returnByValue: true });
     assert(!exceptionDetails, exceptionDetails?.exception?.description);
     return result.value;
   } finally { await session.detach(); }
@@ -1005,7 +1006,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
           assert.deepEqual(seriousOrCritical(await withAxe(page, () => axe.run())), [], name);
         };
         // Before any message each region is empty, rendered (not display: none) and in the accessibility tree.
-        const regions = { "token-error": "alert", "token-status": "status", "primary-status": "status", "custom-error": "alert", "custom-status": "status" };
+        const regions = { "token-error": "alert", "token-status": "status", "primary-status": "status", "custom-error": "alert", "custom-status": "status",
+          "ai-error": "alert", "ai-status": "status" };
         for (const [id, role] of Object.entries(regions)) {
           assert.deepEqual(await t(id).evaluate((el) => [el.getAttribute("role"), el.textContent, el.checkVisibility(), getComputedStyle(el).display !== "none"]),
             [role, "", true, true], id);
@@ -1048,6 +1050,283 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await page.close();
         await sw.evaluate(() => chrome.storage.local.remove(["token", "tokenFor", "custom", "primary"]));
       }
+    });
+
+    // --- The answer card and Chrome's on-device AI (docs/output-format.md), UI half ---
+    // A stand-in AQ.tidy() in the content scripts' world hands the panel a fake card shaped like the contract
+    // (docs/output-format.md, section 8), so these tests show the rendering whatever the worker and content/format.js
+    // do. Queen's reply still comes from the mocked server through the real background. Where the mock's reply has no
+    // evaluation or line, `extra` supplies them.
+    const fakeTidy = (page, extra, ms = 0) => isolated(page, ({ extra, ms }) => {
+      AQ.tidy = (r) => new Promise((resolve) => setTimeout(() => resolve({ ...r, ...extra }), ms));
+      return true;
+    }, { extra, ms });
+    const tall = { viewport: { width: 1280, height: 1500 } }; // the whole card in one screenshot
+    const cardText = (ui, name, sel) => ui(name).locator(sel).allTextContents();
+    const cardAxe = async (page, name) => assert.deepEqual(seriousOrCritical(await withAxe(page, async ({ context, host }) => {
+      const el = document.querySelector(host);
+      document.body.append(el); // as in shot(): colour contrast needs the host inside <body>
+      try { return await axe.run(context); } finally { document.documentElement.append(el); }
+    }, { context: axeTarget(selectors.card), host: selectors.host })), [], name);
+    const before = { evaluationText: "White is slightly better by approximately 0.3 pawns.", criticalLine: "3.Bb5 a6 4.Ba4 Nf6" };
+    const cardCases = [
+      // [name, fixture, mock plan, ask, what the stand-in AQ.tidy() adds, headline, the card's parts in order]
+      ["card-best-move", "lichess-recorded", "ok", "best", CARDS.BEST, "Queen plays 4.Nxe5", ["estimate", "why", "main-line", "idea", "others", "full", "by"]],
+      ["card-best-move-rules", "lichess-recorded", "ok", "best", CARDS.RULES, "Queen plays 4.Nxe5", ["estimate", "why", "main-line", "idea", "others", "full", "by"]],
+      ["card-explain-agree", "lichess-analysis", "agree", "explain", { ...CARDS.EXPLAIN, ...before, criticalLine: "3.Bc4 Bc5 4.c3", promising: ["Bb5", "d4"],
+        card: { source: "nano", played: null, why: ["Develops the bishop toward f7.", "Prepares to castle."], idea: "Castle, then build the center with c3 and d4.",
+          others: [{ san: "Bb5", tag: "Also good", reason: "Pins the knight that defends e5." }, { san: "d4", tag: "Slightly worse", reason: "Opens the center before White has castled." }] } },
+        "Queen agrees with 3.Bc4", ["estimate", "why", "main-line", "idea", "others", "full", "by"]],
+      ["card-explain-disagree", "lichess-analysis", "ok", "explain", { ...CARDS.EXPLAIN, ...before }, "3.Bc4 was played. Queen prefers 3.Bb5.",
+        ["played", "estimate", "why", "main-line", "others", "full", "by"]],
+      ["card-explain-disagree-unlisted", "lichess-analysis", "ok", "explain", { ...CARDS.EXPLAIN, ...before, promising: ["d4"], card: { ...CARDS.EXPLAIN.card, played: null } },
+        "3.Bc4 was played. Queen prefers 3.Bb5.",
+        ["estimate", "why", "main-line", "others", "full", "by"]],
+      ["card-board-only", "lichess-board-side", "board-line", "best", { promising: ["c5", "e6"], evaluationText: "Equal for White and Black: the position is balanced.",
+        estimate: { ahead: null, words: "About equal", number: null },
+        card: { source: "mixed", played: null, why: ["Meets e4 in the center and frees the bishop.", "After 2.Nf3 Black defends the pawn with 2...Nc6."], idea: "Develop the pieces, then castle.",
+          others: [{ san: "c5", tag: "Also good", reason: "Fights for d4 from the side." }, { san: "e6", tag: "Slightly worse", reason: "Solid, but it shuts in the bishop on c8." }] } },
+        "Queen plays e5", ["estimate", "why", "main-line", "idea", "others", "full", "by"]],
+      ["card-no-clear-move", "lichess-analysis", "truncated", "best", { card: null, estimate: null, promising: [] }, "Queen didn't name a clear move", ["no-card", "full"]],
+    ];
+    for (const [name, id, plan, ask, extra, headline, parts] of cardCases) {
+      await test("Browser " + name + ": the card renders in order, passes axe and fits 320 px", async () => {
+        await setup(plan);
+        await withPage(id, async (page, ui) => {
+          await ui("launcher").click();
+          await fakeTidy(page, extra);
+          await ui(ask).click();
+          await output(ui, "result");
+          assert.equal(await ui("headline").textContent(), headline);
+          assert.deepEqual(await ui("card").evaluate((card) => [...card.children].map((el) => el.dataset.testid.slice(3))), parts);
+          const card = extra.card;
+          if (card) {
+            assert.deepEqual(await cardText(ui, "why", "ul > li"), card.why);
+            assert.equal(await ui("full").evaluate((d) => d.open), false);
+            assert(!await ui("analysis").isVisible(), "Queen's full answer is collapsed");
+            assert((await ui("by").textContent()).includes("Chrome's built-in AI") === (card.source !== "rules"), card.source);
+            for (const part of parts) assert(await ui(part).isVisible(), part);
+          } else {
+            assert.equal(await ui("full").evaluate((d) => d.open), true);
+            assert(await ui("analysis").isVisible() && await ui("truncated").isVisible() && await ui("suggestion").isVisible());
+            assert.match(await ui("no-card").textContent(), /no short points, because Queen's move couldn't be checked/);
+          }
+          if (name === "card-best-move") {
+            // The checked data comes from the real background's reply to the recorded answer.
+            assert.equal(await ui("line").textContent(), "4.Nxe5 Qf6 5.O-O Ne6 6.d4 d6");
+            assert.deepEqual(await cardText(ui, "others", ".mv"), ["4.O-O", "4.c3"]);
+            assert.deepEqual(await cardText(ui, "others", ".tag"), ["Slightly worse", "Weakest"]);
+            // The chip: light for White, larger than the words beside it, and not what a screen reader is given.
+            const chip = ui("estimate").locator(".chip");
+            assert.equal(await chip.textContent(), "+1.51");
+            assert.deepEqual(await chip.evaluate((el) => [getComputedStyle(el).backgroundColor, el.getAttribute("aria-hidden")]), ["rgb(237, 230, 214)", "true"]);
+            const spoken = await ui("card").ariaSnapshot();
+            assert.match(spoken, /- paragraph: plus 1\.51, White is better\s+- paragraph: Queen's estimate after 4\.Nxe5/);
+            assert.doesNotMatch(spoken, /\+1\.51/);
+            assert.match(spoken, /- heading "Why 4\.Nxe5" \[level=4\]\s+- list:\s+- listitem: Captures the central pawn/);
+            assert.match(spoken, /- heading "Main line" \[level=4\]\s+- paragraph: 4\.Nxe5 Qf6 5\.O-O Ne6 6\.d4 d6/);
+            assert.match(spoken, /- heading "Other moves" \[level=4\]\s+- list:\s+- listitem:/);
+            assert.match(spoken, /Queen's full answer/);
+            // A move number never wraps away from its moves: each unit of the line is unbreakable.
+            assert.deepEqual(await ui("line").locator("span").evaluateAll((all) => all.map((el) => [el.textContent, getComputedStyle(el).whiteSpace])),
+              [["4.Nxe5 Qf6", "nowrap"], ["5.O-O Ne6", "nowrap"], ["6.d4 d6", "nowrap"]]);
+          }
+          if (name === "card-explain-disagree") {
+            assert.equal(await ui("verdict").textContent(), "This explains Bb5. Queen's note on Bc4 comes first.");
+            assert.equal(await ui("played").locator("h4").textContent(), "Queen on 3.Bc4");
+            assert.deepEqual(await cardText(ui, "others", ".mv"), ["3.d4"]);
+          }
+          if (name === "card-explain-disagree-unlisted") assert.equal(await ui("verdict").textContent(), "This explains Bb5. Queen can't judge Bc4 directly.");
+          if (name === "card-explain-agree") assert.equal(await ui("verdict").count(), 0);
+          if (name === "card-board-only") {
+            assert.equal(await ui("line-note").textContent(), "Numbered from this position");
+            assert.deepEqual(await cardText(ui, "others", ".mv"), ["c5", "e6"]);
+            assert.equal(await ui("estimate").locator(".chip").count(), 0);
+          }
+          await cardAxe(page, name);
+          await shot(page, name);
+          if (name === "card-best-move") {
+            // The verdict, the estimate, the reasons and the line are on the panel's first screen at 800 px tall.
+            await page.setViewportSize({ width: 1280, height: 800 });
+            const floor = (await ui("footer").boundingBox()).y;
+            for (const part of ["headline", "estimate", "why", "main-line"]) {
+              const box = await ui(part).boundingBox();
+              assert(box.y + box.height <= floor, part + " is below the first screen");
+            }
+            await shot(page, "card-first-screen-800");
+            await page.setViewportSize(tall.viewport);
+            // Nothing Queen wrote is lost: the disclosure opens to the original rendering and the evaluation sentence.
+            await ui("full").locator("summary").click();
+            assert(await ui("analysis").isVisible() && await ui("eval").isVisible());
+            assert.equal(await ui("analysis").locator("p").count(), 4);
+            assert.match(await ui("eval").textContent(), /^White is better by approximately 1\.51 pawns/);
+            await cardAxe(page, "card-full-answer-open");
+            await shot(page, "card-full-answer-open");
+            await ui("full").locator("summary").click();
+          }
+          // 320 px wide: nothing overflows, and the summary and buttons keep 24 px targets.
+          await page.setViewportSize({ width: 320, height: tall.viewport.height });
+          await sleep(250); // the resize paints, and the panel's 160 ms entry animation (replayed when axe moved the host) ends
+          assert.deepEqual(await layoutProblems(page, selectors.host), [], "320 px");
+          await shot(page, "narrow-" + name + "-320");
+        }, tall);
+      });
+    }
+
+    await test("Browser tidying: a slow formatter shows a polite status with Cancel, then the answer once; Cancel drops it", async () => {
+      const { since } = await setup();
+      await withPage("lichess-recorded", async (page, ui) => {
+        await ui("launcher").click();
+        await fakeTidy(page, CARDS.BEST, 1500);
+        // Count every headline the panel ever shows for this ask.
+        await page.evaluate(({ host, headline }) => {
+          window.aqHeadlines = [];
+          new MutationObserver(() => {
+            const text = document.querySelector(host).shadowRoot.querySelector(headline)?.textContent;
+            if (text && window.aqHeadlines.at(-1) !== text) window.aqHeadlines.push(text);
+          }).observe(document.querySelector(host).shadowRoot, { subtree: true, childList: true, characterData: true });
+        }, { host: selectors.host, headline: selectors.headline });
+        await ui("best").click();
+        await output(ui, "tidying");
+        const status = await ui("status").ariaSnapshot();
+        assert.match(status, /- status:\s+- paragraph: Queen has answered\.\s+- paragraph: Position after 3\.\.\.Nd4, White to move\s+- paragraph: Shortening it on this device\./);
+        assert(await ui("cancel").isVisible());
+        assert.equal(await ui("headline").count(), 0);
+        await shot(page, "card-tidying");
+        await output(ui, "result");
+        assert.deepEqual(await cardText(ui, "why", "li"), CARDS.BEST.card.why);
+        await sleep(600);
+        assert.deepEqual(await page.evaluate(() => window.aqHeadlines), ["Queen plays 4.Nxe5"], "shown once");
+        // Cancel while tidying: nothing is shown, also after the formatter resolves.
+        await ui("ask-again").click();
+        await output(ui, "tidying");
+        await ui("cancel").click();
+        await sleep(1800);
+        assert(!await ui("out").isVisible());
+        assert.equal(await ui("headline").count(), 0);
+        assert.equal(posts(since).length, 2);
+      });
+    });
+
+    await test("Browser Settings: Chrome's on-device AI shows each state, downloads only on a click with progress, and passes axe", async () => {
+      const sw = await worker(ctx);
+      const t = (page, id) => page.locator(`[data-testid="opt-ai-${id}"]`);
+      // A LanguageModel stand-in, in place before options.js runs. "absent" removes the API as on an older Chrome.
+      const mockAi = (state) => {
+        delete globalThis.LanguageModel;
+        if (typeof LanguageModel !== "undefined") Object.defineProperty(globalThis, "LanguageModel", { value: undefined, configurable: true, writable: true });
+        if (state === "absent") return;
+        const calls = window.aqAi = { availability: [], create: [], destroyed: 0 };
+        let now = state;
+        globalThis.LanguageModel = {
+          availability: async (options) => { calls.availability.push(options); if (now === "throws") throw new Error("not now"); return now; },
+          create: (options) => {
+            calls.create.push({ byClick: navigator.userActivation.isActive, options: JSON.parse(JSON.stringify(options)), monitor: typeof options.monitor });
+            const monitor = new EventTarget();
+            options.monitor(monitor);
+            return new Promise((resolve, reject) => {
+              window.aqAiProgress = (loaded) => monitor.dispatchEvent(Object.assign(new Event("downloadprogress"), { loaded, total: 1 }));
+              window.aqAiDone = () => { now = "available"; resolve({ destroy: () => calls.destroyed++ }); };
+              window.aqAiFail = (message) => reject(new Error(message));
+            });
+          },
+        };
+      };
+      const errors = [];
+      const open = async (state) => {
+        const page = await ctx.newPage();
+        page.on("pageerror", (err) => errors.push(state + ": " + err.message));
+        await page.addInitScript(mockAi, state);
+        await page.goto(new URL("options.html", sw.url()).href);
+        await until(async () => await t(page, "state").getAttribute("data-state"));
+        return page;
+      };
+      const scan = async (page, name) => {
+        await page.screenshot({ path: path.join(out, name + ".png"), fullPage: true });
+        assert.deepEqual(seriousOrCritical(await withAxe(page, () => axe.run())), [], name);
+      };
+      const english = { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
+      for (const [state, shown, line, detail] of [
+        ["available", "available", "Ready on this device.", /uses it to shorten Queen's answers/],
+        ["downloadable", "downloadable", "Not downloaded yet.", /several GB\. Chrome downloads it one time and shares it/],
+        ["downloading", "downloading", "Chrome is downloading the model.", /several GB/],
+        ["unavailable", "unavailable", "Not available on this device.", /22 GB of free disk space, and either a graphics card with more than 4 GB of memory or 16 GB of RAM with 4 or more processor cores.*picked from Queen's own sentences/],
+        ["absent", "unsupported", "Not supported by this Chrome.", /no built-in AI model.*picked from Queen's own sentences/],
+        ["throws", "unknown", "Chrome didn't say whether its model is ready.", /Reload this page/],
+        ["after-download", "unknown", "Chrome didn't say whether its model is ready.", /Reload this page/], // a value this version doesn't know
+      ]) {
+        const page = await open(state);
+        try {
+          assert.equal(await t(page, "state").getAttribute("data-state"), shown, state);
+          assert.equal(await t(page, "state").textContent(), line, state);
+          assert.match(await t(page, "detail").textContent(), detail, state);
+          // The Download button only when the model can be downloaded; no progress and no message before a click.
+          assert.equal(await t(page, "download").isVisible(), state === "downloadable", state);
+          assert.equal(await t(page, "progress").isVisible(), false, state);
+          assert.deepEqual([await t(page, "error").textContent(), await t(page, "status").textContent()], ["", ""], state);
+          const calls = await page.evaluate(() => window.aqAi);
+          if (state === "absent") assert.equal(calls, undefined);
+          else {
+            assert.deepEqual(calls.availability, [english], state + ": asked once, English in and out");
+            assert.deepEqual(calls.create, [], state + ": nothing is downloaded on load");
+          }
+          const region = await page.locator('section[aria-labelledby="ai-h"]').ariaSnapshot();
+          assert.match(region, /heading "Chrome's on-device AI \(optional\)" \[level=2\]/);
+          assert.match(region, /nothing extra is sent anywhere/);
+          if (state !== "after-download") await scan(page, "options-ai-" + shown);
+        } finally { await page.close(); }
+      }
+
+      // Download: create() runs inside the click, progress is shown, the session is destroyed, the state becomes ready.
+      const page = await open("downloadable");
+      try {
+        assert.equal(await t(page, "download").getAttribute("aria-describedby"), "ai-detail"); // the size is part of the button's description
+        await t(page, "download").focus();
+        await page.keyboard.press("Enter");
+        await until(async () => await t(page, "state").getAttribute("data-state") === "downloading");
+        const made = (await page.evaluate(() => window.aqAi)).create;
+        assert.deepEqual(made, [{ byClick: true, options: english, monitor: "function" }]);
+        assert.equal(await t(page, "download").isVisible(), false);
+        assert.equal(await t(page, "status").textContent(), "Download started.");
+        assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), "opt-ai-state", "focus moves to the state line");
+        assert.deepEqual([await t(page, "percent").textContent(), await t(page, "progress").getAttribute("value")], ["0%", "0"]);
+        await page.evaluate(() => window.aqAiProgress(0.42));
+        assert.deepEqual([await t(page, "percent").textContent(), await t(page, "progress").evaluate((el) => el.value)], ["42%", 0.42]);
+        assert.match(await page.locator('section[aria-labelledby="ai-h"]').ariaSnapshot(), /progressbar "Download progress"/);
+        assert.equal(await t(page, "status").textContent(), "Download started.", "the percentage is not announced tick by tick");
+        await scan(page, "options-ai-download-progress");
+        // Coming back to the tab mid-download keeps the progress on screen.
+        await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+        await sleep(100);
+        assert(await t(page, "progress").isVisible());
+        await page.evaluate(() => { window.aqAiProgress(1); window.aqAiDone(); });
+        await until(async () => await t(page, "state").getAttribute("data-state") === "available");
+        assert.equal(await t(page, "status").textContent(), "Downloaded. Ask Queen uses it from your next question.");
+        assert.equal(await t(page, "progress").isVisible(), false);
+        assert.equal(await t(page, "download").isVisible(), false);
+        assert.equal((await page.evaluate(() => window.aqAi)).destroyed, 1, "the session is destroyed");
+        await scan(page, "options-ai-downloaded");
+      } finally { await page.close(); }
+
+      // A download Chrome refuses: an alert, and the button is back.
+      const failing = await open("downloadable");
+      try {
+        await t(failing, "download").click();
+        await until(async () => await t(failing, "state").getAttribute("data-state") === "downloading");
+        await failing.evaluate(() => window.aqAiFail("The device is on a metered connection."));
+        await until(async () => await t(failing, "state").getAttribute("data-state") === "downloadable");
+        assert.equal(await t(failing, "error").textContent(), "Chrome couldn't download the model: The device is on a metered connection.");
+        assert.equal(await t(failing, "error").getAttribute("role"), "alert");
+        assert.equal(await t(failing, "status").textContent(), "");
+        assert(await t(failing, "download").isVisible());
+        assert.equal(await t(failing, "progress").isVisible(), false);
+        await scan(failing, "options-ai-download-failed");
+      } finally { await failing.close(); }
+      assert.deepEqual(errors, []);
+      // Every use of the API in the shipped page is guarded.
+      const source = fs.readFileSync(path.join(extension, "options.js"), "utf8");
+      assert.equal(source.match(/LanguageModel\./g).length, 2);
+      assert.equal(source.match(/typeof LanguageModel [!=]== "undefined"/g).length, 2);
     });
 
     // What a screen reader is given at each step of docs/a11y-walkthrough.md: Chromium's accessibility tree as
@@ -1110,7 +1389,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
         await output(ui, "result");
         const result = await snap("Result", ui("panel"));
         assert.match(result, /- status:\s+- heading "Queen plays 3\.\.\.Be7" \[level=3\]/);
-        assert.match(result, /button "Copy FEN"[\s\S]*button "Ask again"/);
+        assert.match(result, /Queen's full answer[\s\S]*button "Copy FEN"[\s\S]*button "Ask again"/);
         await navigate(page, "lichess-start");
         await ui("stale").waitFor();
         const stale = await snap("Stale result", ui("panel"));
@@ -1122,6 +1401,23 @@ async function runBrowser(extension, temp, out, test, packaged) {
         assert.match(gated, /- status: Available after the game ends\./);
         assert.deepEqual(gated.match(/- button[^\n]*/g), ['- button "Close"']);
       });
+      await setup();
+      await withPage("lichess-recorded", async (page, ui) => {
+        await ui("launcher").click();
+        await fakeTidy(page, CARDS.BEST); // a fake card on the recorded answer, as in the card tests above
+        await ui("best").click();
+        await output(ui, "result");
+        const card = await snap("Result with the answer card", ui("panel"));
+        assert.match(card, /- status:\s+- heading "Queen plays 4\.Nxe5" \[level=3\]/);
+        assert.match(card, /- paragraph: plus 1\.51, White is better\s+- paragraph: Queen's estimate after 4\.Nxe5/);
+        for (const name of ["Why 4.Nxe5", "Main line", "Key idea", "Other moves"]) assert(card.includes(`heading "${name}" [level=4]`), name);
+        assert.equal(card.match(/- list:/g)?.length, 2, "the reasons and the other moves are lists");
+        assert.doesNotMatch(card, /\+1\.51/, "the chip itself is hidden");
+        await ui("full").locator("summary").focus();
+        await page.keyboard.press("Enter");
+        assert(await ui("analysis").isVisible(), "the disclosure opens from the keyboard");
+        assert.match(await snap("Queen's full answer, opened", ui("full")), /heading "Evaluation" \[level=4\]\s+- paragraph: White is better by approximately 1\.51 pawns/);
+      });
       const page = await ctx.newPage();
       try {
         await page.goto(new URL("options.html", (await worker(ctx)).url()).href);
@@ -1130,7 +1426,8 @@ async function runBrowser(extension, temp, out, test, packaged) {
         for (const name of ["New token", "Space address"]) assert(settings.includes(`textbox "${name}"`), name);
         for (const name of ["Ask this server first", "It answers like"]) assert(settings.includes(`combobox "${name}"`), name);
         assert.match(settings, /checkbox "Send my Hugging Face token to this server too" \[disabled\]/);
-        assert.equal(settings.match(/- alert/g)?.length, 2);
+        assert.equal(settings.match(/- alert/g)?.length, 3);
+        assert.match(settings, /region "Chrome's on-device AI \(optional\)"/);
         await page.locator('[data-testid="opt-token-save"]').click();
         assert.match(await snap("Settings after saving with no token", page.locator("body")), /- alert: Paste a token first\./);
         assert.equal(await focused(page), "opt-token", "focus goes back to the field");

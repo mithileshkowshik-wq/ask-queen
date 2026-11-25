@@ -1,6 +1,6 @@
 # Ask Queen privacy policy
 
-Last updated: 19 November 2026. Applies to Ask Queen 1.0.0 and later.
+Last updated: 25 November 2026. Applies to Ask Queen 1.0.0 and later.
 
 Ask Queen is a Chrome extension with one purpose: to explain a position from a finished or analysed game of standard
 chess on chess.com or lichess.org, using the QUEEN chess language model. This policy says what the extension sends,
@@ -13,6 +13,8 @@ to whom, and what it keeps.
   Face token, the token is sent too.
 - If that server fails in a way that may be temporary, the same request is sent once to a backup server.
 - Those servers are run by third parties, who can see what is sent.
+- The answer is then shortened into a few points on your device, by Chrome's built-in AI model when it is ready and
+  by the extension's own rules otherwise. Nothing extra leaves your browser for that.
 - There are no analytics, no ads, no tracking, and nothing is sold.
 
 ## What is sent, and when
@@ -64,6 +66,24 @@ different address clears it, and the token does not go to the new address until 
 
 The author of this extension receives nothing. The extension has no server of its own.
 
+## Shortening the answer on your device
+
+When a QUEEN server has answered, the extension turns the answer into a short card: a few reasons, a key idea and one
+line for each other move. This step runs in your browser and makes no request of any kind.
+
+- If Chrome's built-in AI model (Gemini Nano) is installed and ready, the extension hands it QUEEN's answer and asks
+  for shorter sentences. The model runs on your device. What it is given is the answer as the panel shows it: the
+  position and QUEEN's words. It is never given your token.
+- Otherwise the extension picks sentences from QUEEN's answer with fixed rules.
+
+A line under the card says which of the two wrote the short text. The move, the estimate and the main line are always
+QUEEN's own.
+
+Asking a question never downloads the model. Settings shows whether Chrome has it, and has a **Download** button when
+it can be downloaded. If you click it, Chrome itself downloads the model (several GB) from Google, the same way it
+would for any site or extension that uses it. That download is made by Chrome, not by Ask Queen, and carries nothing
+from the extension: no position, no answer and no token. The extension stores nothing about the model.
+
 ## What is stored on your device
 
 Stored in Chrome's local extension storage, in this browser profile only, never synced:
@@ -114,6 +134,7 @@ shows one short message saying why (for example "Available after the game ends")
 - It does not use or transfer your data for anything unrelated to its single purpose.
 - It does not use your data for advertising, profiling, or to determine creditworthiness or for lending.
 - It contains no analytics, no trackers and no remotely loaded code.
+- It does not send a position, an answer or your token anywhere to shorten an answer. That step stays on your device.
 
 Its use of data follows the Chrome Web Store User Data Policy, including the Limited Use requirements.
 

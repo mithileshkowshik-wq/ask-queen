@@ -120,6 +120,63 @@ $("custom-remove").addEventListener("click", async () => {
   $("origin").focus();
 });
 
+// --- Chrome's on-device AI ---
+// Chrome's built-in model (the Prompt API's LanguageModel) shortens Queen's answers on this device. This page only
+// shows whether Chrome has it and, on a click, asks Chrome to download it. Every use is guarded: older Chromes and
+// other browsers have no LanguageModel at all.
+const AI = { expectedInputs: [{ type: "text", languages: ["en"] }], expectedOutputs: [{ type: "text", languages: ["en"] }] };
+const RULES = "Ask Queen still shows short points, picked from Queen's own sentences.";
+const AI_STATES = { // availability: [state line, detail]
+  available: ["Ready on this device.", "Ask Queen uses it to shorten Queen's answers. There is nothing to set up."],
+  downloadable: ["Not downloaded yet.", "The model is several GB. Chrome downloads it one time and shares it with every site and extension that uses it. It needs an unmetered connection."],
+  downloading: ["Chrome is downloading the model.", "It is several GB, so this can take a while. You can keep using Chrome, and Ask Queen, in the meantime."],
+  unavailable: ["Not available on this device.", `Chrome says its model can't run here. It needs Windows, macOS, Linux or a Chromebook Plus, at least 22 GB of free disk space, and either a graphics card with more than 4 GB of memory or 16 GB of RAM with 4 or more processor cores. ${RULES}`],
+  unsupported: ["Not supported by this Chrome.", `This version of Chrome has no built-in AI model, or it is switched off. ${RULES}`],
+  unknown: ["Chrome didn't say whether its model is ready.", `Reload this page to check again. ${RULES}`],
+};
+let downloading = false; // a download this page started: its progress is on screen
+const percent = (loaded) => {
+  const part = Math.min(1, Math.max(0, Number(loaded) || 0));
+  $("ai-progress").value = part;
+  say("ai-percent", `${Math.round(part * 100)}%`);
+};
+async function showAi() {
+  let state = "unsupported";
+  if (downloading) state = "downloading";
+  else if (typeof LanguageModel !== "undefined") {
+    try { state = await LanguageModel.availability(AI); } catch { state = "unknown"; }
+  }
+  if (downloading && state !== "downloading") return; // a download began while Chrome was answering
+  const [line, detail] = AI_STATES[state] || AI_STATES.unknown;
+  say("ai-state", line);
+  say("ai-detail", detail);
+  $("ai-state").dataset.state = AI_STATES[state] ? state : "unknown";
+  $("ai-get").hidden = state !== "downloadable";
+  $("ai-loading").hidden = !downloading;
+}
+$("ai-download").addEventListener("click", () => {
+  if (typeof LanguageModel === "undefined") return showAi();
+  say("ai-error");
+  let session;
+  try { // create() starts the download, and Chrome allows that only inside a click: nothing may be awaited before it
+    session = LanguageModel.create({ ...AI, monitor(m) { m.addEventListener("downloadprogress", (e) => percent(e.loaded)); } });
+  } catch (e) { session = Promise.reject(e); }
+  downloading = true;
+  percent(0);
+  showAi();
+  $("ai-state").focus(); // the button is gone, so focus goes to the line that says what is happening
+  say("ai-status", "Download started.");
+  Promise.resolve(session).then((made) => {
+    try { made.destroy(); } catch {} // the session was only needed to fetch the model
+    say("ai-status", "Downloaded. Ask Queen uses it from your next question.");
+  }, (e) => {
+    say("ai-status");
+    say("ai-error", `Chrome couldn't download the model${e?.message ? `: ${String(e.message).slice(0, 200)}` : "."}`);
+  }).finally(() => { downloading = false; showAi(); });
+});
+// The state can change while this page is in the background (a download finishing, a flag being set).
+document.addEventListener("visibilitychange", () => { if (!document.hidden) showAi(); });
+
 // --- keyboard shortcut ---
 // This page can read the binding the user actually has, which the panel on a chess page cannot.
 chrome.commands?.getAll().then((all) => {
@@ -133,3 +190,4 @@ chrome.commands?.getAll().then((all) => {
 
 resetConsent();
 render();
+showAi();

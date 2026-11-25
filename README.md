@@ -23,12 +23,14 @@ It does:
 It doesn't:
 
 - **Judge your move directly.** QUEEN explains only its own choice. When it prefers another move, the panel says so
-  plainly: "This explains Bd7. Queen can't judge Nf6 directly."
+  plainly: "This explains Bd7. Queen can't judge Nf6 directly." If QUEEN's own text happens to rate the move you
+  played, that note is shown first, under "Queen on 14...Nf6", and it is still QUEEN's view of its own alternatives,
+  not a check of your move.
 - **Replace an engine.** QUEEN is a language model. Its explanations can be wrong, and the panel says so on every
   screen. Check anything that matters with an engine.
 - **Work during a game**, on puzzles, or on Chess960 and other variants. See [Fair play](#fair-play).
 - **Run on your computer.** QUEEN needs a large GPU, so the extension uses free community servers. They can be slow,
-  out of quota, asleep or gone.
+  out of quota, asleep or gone. Only the last step, shortening QUEEN's answer into a card, happens on your computer.
 
 ## Install
 
@@ -56,9 +58,8 @@ Then, on either site:
 3. Wait. An answer usually takes 15 to 60 seconds, and the free servers queue requests, so it can take longer. After
    two and a half minutes the extension gives up and tells you. **Cancel** stops it at any time.
 
-The answer shows, in order: the position QUEEN analysed, its move, any caveats, its evaluation and critical line when the
-server supplied them, and its explanation. **Copy FEN** copies the analysed position. **Ask again** gets a fresh
-answer.
+The answer is a short card, described under [The answer card](#the-answer-card). **Copy FEN** copies the analysed
+position. **Ask again** gets a fresh answer.
 
 Good to know while you use it:
 
@@ -74,6 +75,42 @@ Good to know while you use it:
   the extension was already installed before the shortcut was added: if nothing happens, or the footer shows no
   key, set it at `chrome://extensions/shortcuts`. Tab reaches the launcher and everything in the panel, and Escape
   closes the panel when focus is in it.
+
+## The answer card
+
+The answer is a short card, so you can take it in while you look at the board. From the top:
+
+- **The position QUEEN analysed, and its move**: "Queen plays 14...Bd7", "Queen agrees with 14...Nf6", or "14...Nf6
+  was played. Queen prefers 14...Bd7." Any caveat comes next: the answer was cut off, the move was taken from QUEEN's
+  text, or the board has moved since.
+- **Queen's estimate**: a signed number in pawns in a small chip (light when White is ahead, dark when Black is) and
+  who is better in words, for example "+1.51, White is better".
+- **Why 14...Bd7**: up to three short reasons.
+- **Main line**: QUEEN's line as numbered moves, with its own move highlighted.
+- **Key idea**: one line, when QUEEN states a plan.
+- **Other moves**: up to three moves from QUEEN's own list, each with a tag such as "Also good" or "Slightly worse"
+  and one line.
+- **Queen's full answer**: everything QUEEN wrote, collapsed and one click away.
+
+Where the text comes from:
+
+- **QUEEN's own, checked or read off by fixed rules:** the move, the estimate, the main line, which other moves are
+  listed and their tags. No second model ever writes a move, a number or a verdict.
+- **Shortened on your computer:** the reasons, the key idea and the line beside each other move. When Chrome's
+  on-device AI model is ready, it writes them from QUEEN's text, and each sentence is checked against that text: one
+  that names a move, a square or a number QUEEN didn't is thrown away. Otherwise they are QUEEN's own sentences,
+  picked and trimmed by rules. Either way nothing extra is sent anywhere.
+- **One line under the card says which it was**, for example "Chrome's built-in AI shortened the rest on this
+  device."
+
+A shortened sentence can still miss QUEEN's meaning, and QUEEN itself can be wrong, so the full answer is always
+there. When there is nothing to shorten, for example when QUEEN named no clear move, the card says so and shows the
+full answer open.
+
+Chrome's model is optional. **Settings** shows whether Chrome has it, and has a **Download** button when it can be
+downloaded (several GB, one time, shared by Chrome). It needs a computer with about 22 GB of free disk space and
+either a graphics card with more than 4 GB of memory or 16 GB of RAM and 4 processor cores. Asking a question never
+starts that download.
 
 ## Fair play
 
@@ -104,6 +141,8 @@ The full policy is in [PRIVACY.md](PRIVACY.md). In short:
   `hugging-apps/queen-pawn-8`. They are not run by Chess.com, Lichess, Princeton, Hugging Face or this project, and
   the people who run them can see what is sent.
 - **Stored in your browser only:** your token, your server choices, and two panel preferences.
+- **The answer is shortened on your device**, by Chrome's built-in AI model when it is ready and by the extension's
+  own rules otherwise. Nothing extra leaves your browser for that.
 
 ## Hugging Face token
 
@@ -194,7 +233,8 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 
 - `content/chess.js`: chess helpers with no page access, shared with the background.
 - `content/common.js`, `content/lichess.js`, `content/chesscom.js`: read the position from the page.
-- `content/panel.js`: the launcher and the panel.
+- `content/format.js`: shortens QUEEN's answer into the card's short points, on the device.
+- `content/panel.js`: the launcher and the panel, including the answer card.
 - `background.js`: the only code that talks to the servers.
 - `options.html`, `options.js`: Settings.
 - `store/`: Chrome Web Store listing material. `docs/`: review notes and the owner's live checks.
@@ -205,9 +245,11 @@ The code is plain JavaScript with no build step and no runtime dependencies:
   and nobody has promised otherwise.
 - **QUEEN explains its own move**, not an arbitrary one.
 - **Answers can be wrong**, cut off, or missing a clear move. The panel labels each case.
+- **The card is a shortened answer.** Its short sentences can lose or bend QUEEN's meaning, and a tidy card doesn't
+  make the answer more certain. The number is QUEEN's estimate, not an engine's evaluation.
 - **Standard chess only**, and never during a game.
 - **Working from the pieces is less exact.** Castling rights are guessed from where the kings and rooks stand, and the
-  move number isn't known, so QUEEN's move is shown without one and its critical line is numbered from the position
+  move number isn't known, so QUEEN's move is shown without one and its main line is numbered from the position
   you asked about.
 - **chess.com variations** are read as a line only when the page exposes how the moves connect. Otherwise QUEEN works
   from the pieces.
@@ -218,6 +260,8 @@ The code is plain JavaScript with no build step and no runtime dependencies:
 ## More detail
 
 - [PRIVACY.md](PRIVACY.md): what is sent, to whom, and what is stored.
+- [docs/output-format.md](docs/output-format.md): the answer card, who writes each part of it, and how the short
+  text is checked.
 - [docs/threat-model.md](docs/threat-model.md): what the extension protects, from whom, and what it can't.
 - [docs/perf.md](docs/perf.md): the measured cost of the extension on a page when the panel is closed.
 - [docs/live-checklist.md](docs/live-checklist.md): the owner's checks on the live sites.

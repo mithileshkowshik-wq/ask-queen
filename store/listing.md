@@ -27,6 +27,7 @@ After a game on chess.com or lichess, click a move, then click Ask Queen. The ex
 WHAT YOU CAN ASK
 • Explain a move. QUEEN analyses the position before the move you clicked. If it would play the same move, it explains why. If not, it shows its own move and the reasons for it.
 • Ask what QUEEN would play next in the position on the board.
+• The answer is a short card: QUEEN's move, its estimate, the main line and a few short reasons, with QUEEN's full text one click away. The short text is written on your device, by Chrome's built-in AI when it is available, and nothing extra is sent.
 
 WHERE IT WORKS
 • chess.com: Game Review and Analysis.

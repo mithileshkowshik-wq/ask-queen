@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask Queen: answer format mockup</title>
+<!--
+  Static mockup for docs/output-format.md. Nothing here ships.
+  Open the file to see every case side by side, or add ?case=<id> to see one case as a 360 px panel
+  (that is how the PNGs in docs/output-format/ are made).
+  The variables, fonts and base rules are copied from content/panel.js. Rules under "new" are the proposal.
+-->
+<style>
+/* ---- copied from content/panel.js ---- */
+* { box-sizing: border-box; margin: 0; }
+[hidden] { display: none !important; }
+.panel {
+  --ink: #19141f; --raise: #251e2e; --line: #3b3148; --edge: #857a96; --ivory: #ede6d6; --dim: #a9a0b4;
+  --gold: #d9b45f; --gold-ink: #2a1f06; --amber: #e3b88a;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: ui-serif, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  font: 14px/1.5 var(--sans); color: var(--ivory); background: var(--ink);
+  border: 1px solid var(--edge); -webkit-font-smoothing: antialiased; text-align: left;
+  width: 360px; display: flex; flex-direction: column; border-radius: 14px; color-scheme: dark;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+.glyph { color: var(--gold); font: 18px/1 "Apple Symbols", "Segoe UI Symbol", "Noto Sans Symbols2", "DejaVu Sans", sans-serif; }
+.head { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--line); }
+h2 { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; }
+.icon { width: 30px; height: 30px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: none; color: var(--dim); font-size: 18px; line-height: 1; }
+.body { padding: 16px; }
+.foot { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11.5px; }
+.foot > :first-child { flex: 1; }
+.kbd { padding: 1px 6px; border: 1px solid var(--edge); border-radius: 5px; color: var(--ivory); white-space: nowrap; }
+.ask, .slot { display: flex; flex-direction: column; gap: 12px; }
+.out { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.pre { margin-bottom: 12px; }
+.live { margin-bottom: 12px; }
+h3 { font: 500 21px/1.25 var(--serif); overflow-wrap: anywhere; }
+.sub { color: var(--dim); font-size: 13px; }
+.disc { display: inline-block; width: 10px; height: 10px; margin-right: 7px; border: 1.5px solid var(--ivory); border-radius: 50%; }
+.disc.w { background: var(--ivory); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { flex: 1 1 auto; min-height: 36px; padding: 7px 12px; border: 1px solid var(--edge); border-radius: 9px; background: var(--raise); font-size: 13px; font-weight: 600; }
+.btn.primary { border-color: var(--gold); background: var(--gold); color: var(--gold-ink); }
+.link { align-self: flex-start; min-width: 24px; min-height: 24px; padding: 2px 0; border: 0; background: none; color: var(--ivory); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.caveat { display: flex; flex-direction: column; gap: 4px; padding-left: 10px; border-left: 3px solid var(--amber); color: var(--amber); font-size: 13px; }
+.md { line-height: 1.6; overflow-wrap: anywhere; }
+.md > * + * { margin-top: 10px; }
+.md h4 { margin-top: 16px; color: var(--gold); font-size: 13px; font-weight: 600; }
+summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer; }
+.raw { color: var(--dim); font-size: 12px; overflow-wrap: anywhere; }
+
+/* ---- new: the answer card ---- */
+.card { display: flex; flex-direction: column; gap: 14px; }
+.card h4 { margin-bottom: 4px; color: var(--gold); font-size: 13px; font-weight: 600; }
+
+/* Queen's estimate: a signed number in pawns, and who is better in words */
+.est { display: flex; align-items: center; gap: 12px; }
+.chip { flex: none; min-width: 62px; padding: 3px 9px; border: 1px solid var(--ivory); border-radius: 7px; text-align: center;
+  font: 500 17px/1.4 var(--serif); font-variant-numeric: tabular-nums; }
+.chip.w { background: var(--ivory); color: var(--ink); }   /* White is ahead: a light chip */
+.est p { line-height: 1.35; }
+.est .sub { display: block; }
+
+.why { padding-left: 18px; }
+.why li::marker { color: var(--gold); }
+.why li { line-height: 1.45; }
+.why li + li { margin-top: 5px; }
+
+/* The main line: numbered moves; a move number never parts from its moves */
+.moves { font: 15px/1.7 var(--serif); }
+.moves span { display: inline-block; margin-right: 12px; white-space: nowrap; }
+.moves b { font-weight: 600; color: var(--gold); }
+.moves + .sub { display: block; }
+
+/* Other moves: the move, a short tag, one line of reason */
+.cands { display: flex; flex-direction: column; gap: 10px; }
+.cand > div { display: flex; align-items: baseline; gap: 8px; }
+.mv { font: 15px/1.45 var(--serif); }
+.tag { padding: 0 7px; border: 1px solid var(--edge); border-radius: 9px; color: var(--dim); font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap; }
+.tag.good { border-color: var(--ivory); color: var(--ivory); }
+.tag.bad { border-color: var(--amber); color: var(--amber); }
+.cand p { font-size: 13.5px; line-height: 1.45; }
+.played { padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--raise); }
+.played > div { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+.played h4 { margin: 0; }
+.played p { font-size: 13.5px; line-height: 1.45; }
+
+details.full { padding-top: 12px; border-top: 1px solid var(--line); }
+details.full .md { margin-top: 8px; font-size: 13.5px; }
+.note { color: var(--dim); font-size: 12px; line-height: 1.45; }
+
+/* ---- mockup page only ---- */
+body { margin: 0; background: #2b2a27; font: 14px/1.5 system-ui, sans-serif; color: #ddd; }
+body.one { background: #19141f; }
+body.one .panel { border-radius: 0; border: 0; }
+main { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px; padding: 28px; }
+figure { margin: 0; }
+figcaption { max-width: 360px; margin-bottom: 8px; font-weight: 600; }
+figcaption span { display: block; font-weight: 400; color: #aaa; font-size: 12.5px; }
+body.one main { padding: 0; gap: 0; }
+body.one figcaption { display: none; }
+</style>
+</head>
+<body>
+<main id="app"></main>
+<script>
+// ---------------------------------------------------------------------------------------------------------------
+// Queen's reply. The text is the real recording test/fixtures/boneyland-success.sse, as the panel shows it today.
+// ---------------------------------------------------------------------------------------------------------------
+const QUEEN = /*QUEEN*/{
+ "success": [
+  "The root position is a sharp Sicilian-type structure in which White has a white bishop on c4 eyeing f7, a white knight on f3, and a white pawn on e4, while Black holds a black knight on d4 and a black pawn on e5. The central tension between the white pawn on e4 and the black pawn on e5 is the key strategic feature, and the black knight on d4 is a natural target for White's pieces.",
+  "The best move is 4.Nxe5, capturing the central pawn and establishing a dominant white knight on e5. This gives White a material edge and a powerful centralized piece that attacks f7 and c6. Black's most accurate reply is 4...Qf6, developing the queen to an active square where it supports the center and prepares to challenge the white knight on e5. White's most accurate response is 5.O-O, castling to safety and connecting the rooks. Black's most accurate continuation is 5...Ne6, retreating the knight to a safe square while maintaining central influence. White should then play 6.d4, establishing a powerful central pawn duo on d4 and e4 that restricts Black's piece activity. After 6...d6, White retains the extra pawn and a modest space advantage, with the white knight on e5 continuing to exert pressure.",
+  "The alternative 4.O-O is slightly inferior. Black can play 4...Nxf3+, eliminating White's active knight. White's most accurate reply is 5.Qxf3, removing the intruder and activating the queen on the f-file. After 5...Nf6 6.d4 6...d6 7.dxe5, White retains the bishop pair and a modest lead in development, but the edge is slightly smaller than after 4.Nxe5 because Black has resolved the central tension on favorable terms.",
+  "The candidate 4.c3 is the weakest option. Black plays 4...Nxf3+, and after 5.Qxf3 5...Nf6 6.O-O 6...d6 7.d4 7...exd4 8.cxd4, White retains only a modest space advantage and the bishop pair, as Black has a sound structure and can complete development comfortably."
+ ],
+ "evaluation": "White is better by approximately 1.51 pawns, retaining the extra pawn and a modest space advantage after the best play.",
+ "truncated": [
+  "The position is a quiet Italian Game structure with equal material. White holds a modest space advantage from the white pawn on e4 and the active white bishop on c4 pointing toward f7, while Black possesses a compact setup with the black pawn on e5 and the black knight on c6. Black's strategic task is to complete development efficiently, secure the king, and prepare the thematic ...3...d5 break to challenge the center.",
+  "The best move is 3...Be7, developing the king's bishop to a natural square and preparing to castle. This is the most solid and flexible choice, keeping all central options open while addressing the king's safety. After White's most natural reply 4.O-O, Black should develop with 4...Nf6, controlling e4 and preparing to castle. White continues with 5.d3, solidifying the center and preparing Bc1-e3. Black castles with 5...O-O, and White develops with 6.Nc3. Black responds with 6...d6, preparing the thematic ...d6-d5 break. White continues with 7.Be3, and Black can challenge the center with 7...d5. If White exchanges with 8.exd5, then 8...Nxd5 9.Nxd5 9...Be6 11.Nd5-e3 leaves White with an active white bishop and a small space edge, though Black remains solid with no structural weakness.",
+  "The alternative 3...Nf6 is also sound, developing the knight to control e4. After 4.O-O Be7 5.Re1 O-O 6.d3 d6 7.Nc3, the position is similar to the main line but Black has not yet developed the black bishop to e7 before the knight, giving White a slightly more comfortable development sequence. The evaluation is approximately equal to the main line.",
+  "The move 3...d5 is sharply inferior. It immediately opens the center and allows White to win a central pawn with 4.exd5, creating a strong passed white pawn on d5 that attacks the black knight on c6. After 4...Na5 5.Bb5+ c6 6.dxc6, the"
+ ]
+}/*END*/;
+
+// What the background would hand the panel. "verified" comes only from Queen's checked fields; "nano" and "rules"
+// are the two ways the short text can be written (the formatter, and the rule-based fallback).
+const VERIFIED = {
+  best: "Nxe5", number: 4,                                    // best.san, and the move number from the request
+  estimate: { chip: "+1.51", side: "w", words: "White is better" },   // parsed from Queen's evaluation sentence by rule
+  line: "4.Nxe5 Qf6 5.O-O Ne6 6.d4 d6",                       // criticalLine
+  others: [{ san: "O-O", tag: "Slightly worse" }, { san: "c3", tag: "Weakest" }],   // PROMISING_MOVES; tag from Queen's wording by rule
+};
+const NANO = {   // hand-written to the schema; passes the validator in the doc. Not real Gemini Nano output.
+  by: "nano",
+  why: ["Captures the central pawn, giving White a material edge.",
+    "Puts a dominant knight on e5 that attacks f7 and c6.",
+    "White retains the extra pawn and a modest space advantage."],
+  idea: "Castle, then play d4 for a central pawn duo on d4 and e4 that restricts Black's pieces.",
+  reasons: { "O-O": "4...Nxf3+ eliminates White's active knight, so White's edge is slightly smaller.",
+    c3: "After 4...Nxf3+ White retains only a modest space advantage and the bishop pair." },
+};
+const RULES = {  // the exact output of the fallback rules on the recording
+  by: "rules",
+  why: ["Capturing the central pawn and establishing a dominant white knight on e5.",
+    "This gives White a material edge and a powerful centralized piece that attacks f7 and c6."],
+  idea: "White retains the extra pawn and a modest space advantage, with the white knight on e5 continuing to exert pressure.",
+  reasons: { "O-O": "Black can play 4...Nxf3+, eliminating White's active knight.",
+    c3: "White retains only a modest space advantage and the bishop pair, as Black has a sound structure and can complete development comfortably." },
+};
+const BY = {
+  nano: "The move, the estimate and the line are Queen's own. Chrome's built-in AI shortened the rest on this device.",
+  rules: "The move, the estimate and the line are Queen's own. The rest is picked from Queen's sentences.",
+};
+const FOOT = "Answered by boneyland/queen-pawn-8 in 16 s";
+
+// A board-only read is sent with placeholder clocks, so Queen counts from move 1. This re-numbers the recording by
+// hand to show that case; it is an illustration, not a recording.
+const renumber = (s) => s.replace(/\b([4-8])(\.(?:\.\.)?)(?=[A-Za-z])/g, (_, n, dots) => (n - 3) + dots);
+
+const CASES = [
+  { id: "best-move", title: "1. Best move", note: "Short text by the formatter (Gemini Nano).",
+    ask: { disc: "b", head: "3...Nd4", sub: "Black played this. White is to move.", buttons: ["Explain 3...Nd4", "Best move for White"] },
+    context: "Position after 3...Nd4, White to move", headline: "Queen plays 4.Nxe5", text: NANO },
+  { id: "best-move-fallback", title: "1b. Best move, no Gemini Nano", note: "Same layout. Short text by the rule-based fallback: Queen's own sentences.",
+    ask: { disc: "b", head: "3...Nd4", sub: "Black played this. White is to move.", buttons: ["Explain 3...Nd4", "Best move for White"] },
+    context: "Position after 3...Nd4, White to move", headline: "Queen plays 4.Nxe5", text: RULES },
+  { id: "explain-agree", title: "2. Explain, Queen agrees", note: "The played move is Queen's move.",
+    ask: { disc: "w", head: "4.Nxe5", sub: "White played this. Black is to move.", buttons: ["Explain 4.Nxe5", "Best move for Black"] },
+    context: "Position before 4.Nxe5, White to move", headline: "Queen agrees with 4.Nxe5", text: NANO },
+  { id: "explain-disagree", title: "3. Explain, Queen prefers another move", note: "Built from the recording: 4.O-O was played, and Queen's text rates 4.O-O.",
+    ask: { disc: "w", head: "4.O-O", sub: "White played this. Black is to move.", buttons: ["Explain 4.O-O", "Best move for Black"] },
+    context: "Position before 4.O-O, White to move", headline: "4.O-O was played. Queen prefers 4.Nxe5.",
+    verdict: "This explains Nxe5. Queen's note on O-O comes first.", played: "O-O", text: NANO },
+  { id: "explain-disagree-unlisted", title: "3b. Explain, the played move isn't in Queen's text", note: "Built from the recording: 4.d3 was played, which Queen never mentions.",
+    ask: { disc: "w", head: "4.d3", sub: "White played this. Black is to move.", buttons: ["Explain 4.d3", "Best move for Black"] },
+    context: "Position before 4.d3, White to move", headline: "4.d3 was played. Queen prefers 4.Nxe5.",
+    verdict: "This explains Nxe5. Queen can't judge d3 directly.", text: NANO },
+  { id: "board-only", title: "4. Board-only read", note: "No move numbers are known. The recording re-numbered by hand from move 1.",
+    ask: { head: "Position on the board", sub: "The move list can't be used here, so Queen works from the pieces and offers only Best move.",
+      side: "White to move", source: "(detected from the last move)", buttons: ["Best move for White"] },
+    context: "Position on the board (move numbers unknown), White to move", headline: "Queen plays Nxe5", bare: true, text: NANO },
+  { id: "no-clear-move", title: "5. No clear move", note: "The real recording test/fixtures/boneyland-truncated.sse. No short points: the full answer is open.",
+    ask: { disc: "w", head: "3.Bc4", sub: "White played this. Black is to move.", buttons: ["Explain 3.Bc4", "Best move for Black"] },
+    context: "Position after 3.Bc4, Black to move", contextDisc: "b", headline: "Queen didn't name a clear move", none: true },
+  { id: "full-answer-open", title: "6. Queen's full answer, opened", note: "Case 1 with the disclosure open. Nothing Queen wrote is lost.",
+    ask: { disc: "b", head: "3...Nd4", sub: "Black played this. White is to move.", buttons: ["Explain 3...Nd4", "Best move for White"] },
+    context: "Position after 3...Nd4, White to move", headline: "Queen plays 4.Nxe5", text: NANO, open: true },
+];
+
+// ---------------------------------------------------------------------------------------------------------------
+const h = (tag, props = {}, ...kids) => {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) k.includes("-") ? el.setAttribute(k, v) : (el[k] = v);
+  for (const k of kids.flat()) if (k != null && k !== false && k !== "") el.append(k);
+  return el;
+};
+const disc = (s) => h("span", { className: s === "w" ? "disc w" : "disc" });
+const label = (c, san, ply = 0) => (c.bare ? san : `${VERIFIED.number}${ply ? "..." : "."}${san}`);
+
+// "4.Nxe5 Qf6 5.O-O Ne6" -> one unbreakable unit per move number; the first move is Queen's move
+function moves(line) {
+  const units = [];
+  for (const t of line.split(" ")) /^\d+\.(?!\.\.)/.test(t) || !units.length ? units.push([t]) : units.at(-1).push(t);
+  return h("p", { className: "moves" }, units.map((u, i) => {
+    if (i) return h("span", {}, u.join(" "));
+    const m = /^(\d+\.(?:\.\.)?)(.+)$/.exec(u[0]);
+    return h("span", {}, m[1], h("b", {}, m[2]), u.length > 1 ? " " + u.slice(1).join(" ") : "");
+  }));
+}
+const TAG = { "Also good": "good", "Much worse": "bad", Weakest: "bad" };
+function cand(c, o) {
+  const reason = c.bare ? renumber(c.text.reasons[o.san]) : c.text.reasons[o.san];
+  return h("div", { className: "cand" },
+    h("div", {}, h("span", { className: "mv" }, label(c, o.san)), h("span", { className: `tag ${TAG[o.tag] || ""}` }, o.tag)),
+    h("p", {}, reason));
+}
+function fullAnswer(paras, evaluation, open, line2) {
+  return h("details", { className: "full", open },
+    h("summary", {}, "Queen's full answer"),
+    h("div", { className: "md" }, paras.map((p) => h("p", {}, p)), evaluation && [h("h4", {}, "Evaluation"), h("p", {}, evaluation)]),
+    line2 && h("p", { className: "note", style: "margin-top:8px" }, line2));
+}
+
+function result(c) {
+  const V = VERIFIED, buttons = h("div", { className: "row" }, h("button", { className: "btn" }, "Copy FEN"), h("button", { className: "btn" }, "Ask again"));
+  if (c.none) {
+    return [
+      h("div", { className: "caveat" }, h("p", {}, "The answer was cut off."), h("button", { className: "link" }, "Try the other server")),
+      h("p", { className: "caveat" }, "Queen's text suggests 3...Be7 (unverified)"),
+      h("p", { className: "sub" }, "There are no short points, because Queen's move couldn't be checked."),
+      fullAnswer(QUEEN.truncated, null, true),
+      buttons, h("p", { className: "raw" }, "Answered by boneyland/queen-pawn-8 in 15 s")];
+  }
+  const t = c.text, best = label(c, V.best);
+  const line = c.bare ? renumber(V.line) : V.line;
+  const played = c.played && V.others.find((o) => o.san === c.played);
+  const rest = V.others.filter((o) => o !== played);
+  return [
+    c.verdict && h("p", { className: "sub" }, c.verdict),
+    h("div", { className: "card" },
+      played && h("section", { className: "played" },
+        h("div", {}, h("h4", {}, `Queen on ${label(c, played.san)}`), h("span", { className: `tag ${TAG[played.tag] || ""}` }, played.tag)),
+        h("p", {}, c.text.reasons[played.san])),
+      h("div", { className: "est" }, h("span", { className: `chip ${V.estimate.side}` }, V.estimate.chip),
+        h("p", {}, V.estimate.words, h("span", { className: "sub" }, `Queen's estimate after ${best}`))),
+      h("section", {}, h("h4", {}, `Why ${best}`), h("ul", { className: "why" }, t.why.map((w) => h("li", {}, w)))),
+      h("section", {}, h("h4", {}, "Main line"), moves(line), c.bare && h("span", { className: "sub" }, "Numbered from this position")),
+      t.idea && h("section", {}, h("h4", {}, "Key idea"), h("p", {}, c.bare ? renumber(t.idea) : t.idea)),
+      rest.length && h("section", {}, h("h4", {}, "Other moves"), h("div", { className: "cands" }, rest.map((o) => cand(c, o)))),
+      fullAnswer(c.bare ? QUEEN.success.map(renumber) : QUEEN.success, c.bare ? renumber(QUEEN.evaluation) : QUEEN.evaluation, !!c.open),
+      h("p", { className: "note", style: "margin-top:-8px" }, BY[t.by])),
+    buttons, h("p", { className: "raw" }, FOOT)];
+}
+
+function panel(c) {
+  const a = c.ask;
+  return h("div", { className: "panel", role: "dialog", "aria-label": "Ask Queen" },
+    h("div", { className: "head" }, h("h2", {}, h("span", { className: "glyph" }, "♛︎"), "Ask Queen"),
+      h("button", { className: "icon" }, "←"), h("button", { className: "link" }, "Settings"), h("button", { className: "icon" }, "×")),
+    h("div", { className: "body" },
+      h("section", { className: "ask" },
+        h("div", {}, h("h3", {}, a.disc && disc(a.disc), a.head), h("p", { className: "sub" }, a.sub)),
+        a.side && h("p", {}, disc("w"), a.side + " ", h("span", { className: "sub" }, a.source + " "), h("button", { className: "link" }, "Switch to Black")),
+        h("div", { className: "row" }, a.buttons.map((b, i) => h("button", { className: i ? "btn" : "btn primary" }, b))),
+        h("button", { className: "link" }, "Read the board again")),
+      h("section", { className: "out" },
+        h("div", { className: "slot pre" }, h("p", { className: "sub" }, disc(c.contextDisc || "w"), c.context)),
+        h("div", { className: "live" }, h("h3", {}, c.headline)),
+        h("div", { className: "slot" }, result(c)))),
+    h("div", { className: "foot" }, h("span", {}, "Queen is a language model on community servers. Explanations can be wrong."), h("span", { className: "kbd" }, "⌥Q")));
+}
+
+const only = new URLSearchParams(location.search).get("case");
+document.body.classList.toggle("one", !!only);
+document.getElementById("app").append(...CASES.filter((c) => !only || c.id === only).map((c) =>
+  h("figure", { id: c.id }, h("figcaption", {}, c.title, h("span", {}, c.note)), panel(c))));
+</script>
+</body>
+</html>
