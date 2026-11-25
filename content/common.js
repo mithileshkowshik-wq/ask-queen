@@ -186,4 +186,22 @@ var AQ = globalThis.AQ = { adapters: [] };
     const position = { site: adapter.name, ...result };
     return { ...position, snapshotKey: JSON.stringify([location.pathname, position]) };
   };
+
+  // The answer card (content/format.js). Resolves within 6 s with result.card set, and never rejects: a card the
+  // service worker already wrote comes back at once; otherwise this window's LanguageModel (the web Prompt API) writes
+  // it when the model is ready, the rules otherwise, and the worker's token guard checks every string first. An
+  // unreachable guard means no card (null).
+  AQ.tidy = (result) => {
+    if (!globalThis.AQFormat) return Promise.resolve(result && typeof result === "object" ? { ...result, card: result.card ?? null } : result);
+    return AQFormat.tidy(result, {
+      languageModel: typeof LanguageModel === "undefined" ? null : LanguageModel,
+      timeoutMs: 6000,
+      guard: async (r) => {
+        const fields = await chrome.runtime.sendMessage({ type: "guard", result:
+          { evaluationText: r.evaluationText ?? null, criticalLine: r.criticalLine ?? null, analysis: r.analysis ?? null, card: r.card } });
+        if (!fields || typeof fields !== "object") throw new Error("The token guard didn't answer");
+        return { ...r, ...fields };
+      },
+    });
+  };
 })();

@@ -6,7 +6,7 @@ version=$(node -p 'require("./manifest.json").version')
 mkdir -p dist
 
 set -- manifest.json background.js options.html options.js LICENSE \
-  content/keyguard.js content/chess.js content/common.js content/lichess.js content/chesscom.js content/panel.js \
+  content/keyguard.js content/chess.js content/common.js content/lichess.js content/chesscom.js content/format.js content/panel.js \
   icons/16.png icons/32.png icons/48.png icons/128.png
 if [ -d _locales ]; then
   set -- "$@" _locales/*/messages.json

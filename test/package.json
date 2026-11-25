@@ -3,7 +3,8 @@
   "private": true,
   "description": "Dev-only test harness for the Ask Queen extension. Not shipped.",
   "scripts": {
-    "test": "node run.js"
+    "test": "node run.js",
+    "lab": "node nano-lab/serve.js"
   },
   "devDependencies": {
     "axe-core": "4.10.3",
