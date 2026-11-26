@@ -57,7 +57,7 @@ feature, is initiated by the user's click, and is disclosed before first use.
 
 ## Privacy policy URL
 
-The public URL where `PRIVACY.md` is hosted. See `OWNER-TODO.md`.
+https://github.com/mithileshkowshik-wq/ask-queen/blob/main/PRIVACY.md
 
 ## Remote code
 

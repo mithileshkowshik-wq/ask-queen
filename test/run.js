@@ -34,7 +34,7 @@ async function staticTests(temp) {
   await test("Manifest is MV3 with exactly the two built-in HTTPS grants and optional Space origins", () => {
     assert.equal(manifest.manifest_version, 3);
     assert.equal(manifest.version, "1.0.0");
-    assert.equal(manifest.homepage_url, "https://github.com/ask-queen/ask-queen");
+    assert.equal(manifest.homepage_url, "https://github.com/mithileshkowshik-wq/ask-queen");
     assert.match(manifest.minimum_chrome_version, /^\d+$/);
     assert.deepEqual(manifest.permissions, ["storage"]);
     assert.deepEqual(manifest.host_permissions, ["https://boneyland-queen-pawn-8.hf.space/*", "https://hugging-apps-queen-pawn-8.hf.space/*"]);

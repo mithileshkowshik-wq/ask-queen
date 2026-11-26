@@ -15,7 +15,7 @@
   }
 
   const C = globalThis.AQChess;
-  const PRIVACY_URL = "https://github.com/ask-queen/ask-queen/blob/main/PRIVACY.md";
+  const PRIVACY_URL = "https://github.com/mithileshkowshik-wq/ask-queen/blob/main/PRIVACY.md";
   const CSS = `
 :host { all: initial !important; }
 * { box-sizing: border-box; margin: 0; }

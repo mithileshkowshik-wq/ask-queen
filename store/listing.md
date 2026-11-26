@@ -62,21 +62,20 @@ Shown in the description above, in Settings, in the README and in `LICENSE`:
 |---|---|---|
 | Store icon, 128×128 | `icons/128.png` | A gold crown on a dark tile. No site or company marks. |
 | Small promo tile, 440×280 | `store/promo-440x280.png` | Rendered from the fixture page `store/promo-tile.html` by `node store/make-promo.js`. No site logos. Provenance: `store/promo.md`. |
-| Screenshots, 1280×800 | `docs/review/evidence/round-N/` | Made by the test run (`node test/run.js N`) from fixture pages with a mocked server. No site logos. Use the latest round. |
+| Screenshots, 1280×800 | `store/screenshots/` | Rendered by `node store/make-screenshots.js`: the real extension on a store-only fixture page with a recorded server reply. No site logos. Provenance: `store/screenshots.md`. |
 
-Suggested screenshots, in this order (up to five):
+Upload them in this order:
 
-1. The ask view with a move selected, showing both ask buttons.
-2. A result where QUEEN agrees with the move played.
-3. A result where QUEEN prefers another move, showing "Queen can't judge … directly".
-4. Working from the pieces, with the White and Black buttons.
-5. The first-use notice naming the servers.
+1. `01-best-move.png`: the answer card for Queen's move, with the estimate, the reasons, the main line and other moves.
+2. `02-explain-move.png`: explaining a move Queen disagrees with.
+3. `03-ask.png`: the ask view with a move selected.
+4. `04-first-use.png`: the first-use notice naming the servers.
 
 ## Links
 
-- Homepage: the `homepage_url` in `manifest.json` (see `OWNER-TODO.md`).
-- Privacy policy: the public URL where `PRIVACY.md` is hosted (see `OWNER-TODO.md`).
-- Support: the project's issue tracker.
+- Homepage: https://github.com/mithileshkowshik-wq/ask-queen
+- Privacy policy: https://github.com/mithileshkowshik-wq/ask-queen/blob/main/PRIVACY.md
+- Support: https://github.com/mithileshkowshik-wq/ask-queen/issues
 
 ## Wording rules for future edits
 

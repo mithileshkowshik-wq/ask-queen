@@ -152,4 +152,4 @@ change is listed in `CHANGELOG.md`.
 
 ## Contact
 
-Questions and requests: open an issue at <https://github.com/ask-queen/ask-queen/issues>.
+Questions and requests: open an issue at <https://github.com/mithileshkowshik-wq/ask-queen/issues>.

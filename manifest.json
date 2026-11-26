@@ -58,7 +58,7 @@
     }
   ],
   "minimum_chrome_version": "158",
-  "homepage_url": "https://github.com/ask-queen/ask-queen",
+  "homepage_url": "https://github.com/mithileshkowshik-wq/ask-queen",
   "optional_host_permissions": [
     "https://*.hf.space/*"
   ],
