@@ -187,6 +187,11 @@ var AQ = globalThis.AQ = { adapters: [] };
     return { ...position, snapshotKey: JSON.stringify([location.pathname, position]) };
   };
 
+  // At ask time, when the worker won't write the card: start this window's Nano base session (only when the model is
+  // "available"), so it loads while Queen thinks. Never throws; AQ.tidy() then reuses it.
+  AQ.warm = () => {
+    if (globalThis.AQFormat && typeof LanguageModel !== "undefined") void AQFormat.warm(LanguageModel);
+  };
   // The answer card (content/format.js). Resolves within 6 s with result.card set, and never rejects: a card the
   // service worker already wrote comes back at once; otherwise this window's LanguageModel (the web Prompt API) writes
   // it when the model is ready, the rules otherwise, and the worker's token guard checks every string first. An

@@ -138,7 +138,7 @@ card?:     Card | null      // present only when the worker wrote it; otherwise 
 
 **One-shot** messages through `chrome.runtime.sendMessage`:
 - `{ type: "openOptions" }`
-- `{ type: "getPrefs" }` returns `{ firstUseSeen, dock: "right" | "left", shortcut }`. `shortcut` (fix pass 4) is the key actually bound to the `open-panel` command, from `chrome.commands.getAll()`, for example `"Alt+Q"`, or `""` when unbound.
+- `{ type: "getPrefs" }` returns `{ firstUseSeen, dock: "right" | "left", shortcut, workerFormats }`. `shortcut` (fix pass 4) is the key actually bound to the `open-panel` command, from `chrome.commands.getAll()`, for example `"Alt+Q"`, or `""` when unbound. `workerFormats` is `true` when the worker has `LanguageModel` and so writes the answer card (the content script then doesn't warm up a model of its own).
 - `{ type: "setPrefs", prefs }`
 
 The token is never sent to content scripts.
@@ -148,6 +148,8 @@ The token is never sent to content scripts.
 ## Answer card (`content/format.js`, `AQ.tidy`)
 
 **Where Gemini Nano runs.** `background.js` checks `typeof LanguageModel !== "undefined"` after `normalized()`. When the worker has it, the worker posts `{ status: "tidying" }`, writes the card with `AQFormat.tidy` (6 s), guards it with the token and sends `R` with `card` set (and caches it with `R`). When the worker has no `LanguageModel`, `R` goes without a `card` key and the content script writes it with its own window's `LanguageModel` (the web Prompt API, behind the site's permissions policy). Chrome's Prompt API page says the API isn't in Web Workers and is available to top-level windows and their same-origin iframes; Google's extension guidance says it works in the extension service worker; Playwright's Chromium 158 exposes `LanguageModel` in this extension's service worker (`availability()` answers `"unavailable"` there, as it has no model). The browser suite records each context in `docs/review/evidence/round-*/nano-contexts.json`.
+
+**Warm-up** (`AQFormat.warm(LanguageModel) -> Promise<boolean>`). The base session (system prompt and example) is started when the ask is sent, in the context that will write the card, so the model loads while Queen thinks: the worker calls it after a cache miss when it has `LanguageModel`; otherwise the panel calls `AQ.warm()` right after posting the ask, unless `getPrefs` said `workerFormats: true`. It calls `availability()` and `create()` only on `"available"` (never a download), never rejects, and is not tied to the ask: on a cancel it finishes or fails on its own, and the base is destroyed after 5 idle minutes as before. `tidy()` reuses it, and awaits a pending one within its own 6 s, which still starts when the answer arrives. `AQFormat.release(LM)` destroys the base (the idle timer, and the lab's cold start).
 
 **`AQ.tidy(result) -> Promise<result>`** (content scripts, `content/common.js`)
 - Resolves within 6 s and never rejects. A `result` that already has a `card` key (the worker wrote it, or `null`) comes back at once, unchanged.
@@ -167,7 +169,7 @@ The token is never sent to content scripts.
 ```
 Strings are plain text for `text()`: no markup, no line breaks. On a board-only read the panel drops move numbers from them, as it does for the critical line (only removing characters). The final token guard treats every card string as a displayed field: one that leaks is dropped (a reason becomes `""`), a split across fields clears all of them, and a card left without a `why` bullet becomes `null`.
 
-**Validation** of Nano's reply (docs/output-format.md §3): a wrong shape (not JSON, other keys, `why` not 1–3 strings, `others` entries not `{move, reason}`) means the rules write the whole card. Each string is then checked against its own source (why and idea: the best paragraph, the position and the evaluation; a reason: that move's paragraph): length (why 12–90, idea 110, reason 100), moves (and their numbers), squares (named or a source move's target), other numbers, claim words, markup, and token-like text (`hf_`, 20+ letters and digits in a row). A failing string is replaced by the rules' string for that field; when every bullet fails, the rules' bullets are used.
+**Validation** of Nano's reply (docs/output-format.md §3): a wrong shape (not JSON, other keys, `why` not 1–3 strings, `others` entries not `{move, reason}`) means the rules write the whole card. Each string is then checked against its own source (why and idea: the best paragraph, the position and the evaluation; a reason: that move's paragraph): length (why 12–90, idea 110, reason 100), moves (and their numbers), squares (named or a source move's target), other numbers, claim words, markup, token-like text (`hf_`, 20+ letters and digits in a row), number words (`one`…`ten`, `double`, `twice`, `half`, `two-pawn`: the same word must be in the source), and grounding: at most 1 content word (3+ letters, not a stopword, stemmed) missing from the source. Each check record in the report carries the string's `ungrounded` words. A failing string is replaced by the rules' string for that field; when every bullet fails, the rules' bullets are used.
 
 ## Storage
 - `chrome.storage.local` holds `token`, `tokenFor` (a list of origins approved for the token), `primary`, `custom: { origin, api: "boneyland" | "hugging-apps" }`, `firstUseSeen` and `dock`.

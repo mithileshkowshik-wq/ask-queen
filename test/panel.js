@@ -8,11 +8,11 @@ const settle = () => new Promise(setImmediate);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const bodyOf = (id) => F.SITES[id].html.match(/<body>([\s\S]*)<\/body>/)[1];
 
-async function panelFixture(id, { firstUseSeen = true, mutate = (source) => source, prefsDelay = 0 } = {}) {
+async function panelFixture(id, { firstUseSeen = true, mutate = (source) => source, prefsDelay = 0, workerFormats } = {}) {
   const s = fixtureDoc(id);
   const { w } = s;
   const calls = [], events = {};
-  const prefs = { firstUseSeen, dock: "right" };
+  const prefs = { firstUseSeen, dock: "right", ...(workerFormats !== undefined && { workerFormats }) };
   let disconnected = 0;
   Object.defineProperty(w.document, "hidden", { value: false, configurable: true });
   w.chrome = { runtime: {
@@ -811,6 +811,19 @@ function runPanelTests(test) {
       await s.open();
       assert(s.element("out").hidden, "nothing was rendered while the panel was closed");
     } finally { await s.close(); }
+  });
+  test("Warm-up: an ask starts this window's model (AQ.warm) unless getPrefs says the worker writes the card", async () => {
+    for (const [workerFormats, expected] of [[undefined, 1], [false, 1], [true, 0]]) {
+      const s = await panelFixture("lichess-recorded", { workerFormats });
+      try {
+        let warmed = 0;
+        s.w.AQ.warm = () => { warmed++; };
+        await s.open();
+        s.click("best");
+        assert.equal(s.calls.length, 1);
+        assert.equal(warmed, expected, String(workerFormats));
+      } finally { await s.close(); }
+    }
   });
   test("Tidying: the worker's \"tidying\" status shows the same copy after a quarter of a second, and never when the answer follows at once", async () => {
     const s = await panelFixture("lichess-recorded");

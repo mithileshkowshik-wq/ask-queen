@@ -40,11 +40,14 @@
     <div><div class="muted">Model</div><div id="model">checking…</div></div>
     <label>Time limit (ms)<input id="timeout" type="number" min="500" step="500" value="6000"></label>
     <label>Runs per answer<input id="runs" type="number" min="1" max="20" value="1"></label>
+    <label title="The warm-up starts when Run is pressed; the first answer arrives after this delay, as Queen's would">Answer arrives after (ms)<input id="delay" type="number" min="0" step="500" value="3000"></label>
+    <label title="Destroy this page's base session first, so the warm-up measures a cold model load">Cold start<input id="cold" type="checkbox" checked style="width:auto"></label>
     <button id="run">Run all</button>
     <button id="copy" class="secondary" disabled>Copy report</button>
     <button id="download" class="secondary" hidden>Download Gemini Nano</button>
     <span id="status" class="muted" role="status"></span>
   </div>
+  <p id="warm" class="muted"></p>
   <div id="out"></div>
 </main>
 <script src="/content/chess.js"></script>
@@ -59,7 +62,7 @@
   };
   const LM = typeof LanguageModel === "undefined" ? null : LanguageModel;
   const runs = [];
-  let answers = [], availability = "absent";
+  let answers = [], availability = "absent", warmText = "";
 
   async function checkModel() {
     if (!LM) { $("model").textContent = "LanguageModel is not defined here (Chrome 148+ needed)"; return; }
@@ -82,10 +85,10 @@
   const ms = (t) => t == null ? "–" : t + " ms";
   function render(run) {
     const { answer, index, of, report: r, card } = run;
-    const checks = el("table", {}, el("tr", {}, ...["Field", "Text", "Result", "Why"].map((h) => el("th", { textContent: h }))),
+    const checks = el("table", {}, el("tr", {}, ...["Field", "Text", "Result", "Why", "Ungrounded words"].map((h) => el("th", { textContent: h }))),
       ...r.checks.map((c) => el("tr", {}, el("td", { textContent: c.field }), el("td", { textContent: c.text }),
         el("td", { className: c.kept ? "kept" : "rejected", textContent: c.kept ? "kept" : "rejected" }),
-        el("td", { textContent: c.reasons.join(", ") }))));
+        el("td", { textContent: c.reasons.join(", ") }), el("td", { textContent: (c.ungrounded || []).join(", ") || "–" }))));
     return el("section", { className: "answer" },
       el("h2", { textContent: `${answer.name}${of > 1 ? ` (run ${index}/${of})` : ""}` }),
       el("p", {}, "Card source ", el("span", { className: "pill", textContent: card ? card.source : "no card" }),
@@ -99,7 +102,8 @@
 
   function reportText() {
     const lines = ["Ask Queen Nano lab report", `Date: ${new Date().toISOString()}`, `Browser: ${navigator.userAgent}`,
-      `LanguageModel: ${LM ? "present" : "absent"}, availability: ${availability}`, `Time limit: ${$("timeout").value} ms`, ""];
+      `LanguageModel: ${LM ? "present" : "absent"}, availability: ${availability}`, `Time limit: ${$("timeout").value} ms`,
+      `Answer arrives after: ${$("delay").value} ms${$("cold").checked ? ", cold start" : ""}`, `Warm-up: ${warmText || "–"}`, ""];
     const count = { nano: 0, mixed: 0, rules: 0, none: 0 };
     let kept = 0, rejected = 0;
     for (const { answer, index, of, report: r, card } of runs) {
@@ -110,7 +114,8 @@
         `source: ${card ? card.source : "no card"}${r.fallback ? ` | fallback: ${r.fallback}` : ""}`,
         `timings: availability ${ms(r.timings.availability)}, session ${ms(r.timings.session)}, prompt ${ms(r.timings.prompt)}, total ${ms(r.timings.total)}`,
         `raw: ${r.raw == null ? "(none)" : r.raw}`, "checks:",
-        ...r.checks.map((c) => `  [${c.kept ? "kept" : "rejected"}] ${c.field}: ${JSON.stringify(c.text)}${c.reasons.length ? " | " + c.reasons.join(", ") : ""}`),
+        ...r.checks.map((c) => `  [${c.kept ? "kept" : "rejected"}] ${c.field}: ${JSON.stringify(c.text)}${c.reasons.length ? " | " + c.reasons.join(", ") : ""}` +
+          `${c.ungrounded?.length ? " | ungrounded: " + c.ungrounded.join(", ") : ""}`),
         `card: ${JSON.stringify(card)}`, "");
     }
     const prompts = runs.map((r) => r.report.timings.prompt).filter(Number.isFinite);
@@ -125,8 +130,22 @@
     $("copy").disabled = true;
     runs.length = 0;
     $("out").replaceChildren();
+    $("warm").textContent = "";
     const timeoutMs = Math.max(500, +$("timeout").value || 6000), of = Math.min(20, Math.max(1, +$("runs").value || 1));
+    const delay = Math.max(0, +$("delay").value || 0);
+    // As in the extension: the warm-up starts when the ask is sent (here, on Run) and the answer arrives later.
+    const showWarm = (text) => { warmText = text; $("warm").textContent = "Warm-up: " + text; };
+    if (LM && $("cold").checked) AQFormat.release(LM);
+    const t0 = performance.now();
+    showWarm(LM ? "started…" : "no LanguageModel");
+    if (LM) AQFormat.warm(LM).then((ok) => {
+      const t = Math.round(performance.now() - t0);
+      showWarm(ok ? `base session ready ${t} ms after Run (the answer arrives at ${delay} ms${t > delay ? `, so tidy waited ${t - delay} ms of its budget` : ""})`
+        : `not started (${t} ms): the model is not "available"`);
+    });
     try {
+      $("status").textContent = `Waiting ${delay} ms for the answer…`;
+      await new Promise((resolve) => setTimeout(resolve, delay));
       for (const answer of answers) {
         for (let index = 1; index <= of; index++) {
           $("status").textContent = `Running ${answer.name}…`;

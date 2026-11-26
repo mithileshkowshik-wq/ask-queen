@@ -391,6 +391,8 @@ function startExtension() {
         return;
       }
       if (hit) cache.delete(key);
+      // Where the worker writes the card, Nano's base session loads now, while Queen thinks (AQFormat.warm).
+      if (typeof LanguageModel !== "undefined") void format.warm(LanguageModel);
       // A server that sent Retry-After rests that long for every ask and tab. A resting primary with a code that
       // allows no fallback (busy, quota) answers at once, without a request.
       const resting = (space) => {
@@ -516,7 +518,9 @@ function startExtension() {
         // The key the user actually bound to "open-panel" in chrome://extensions/shortcuts ("" when unbound).
         const commands = await chrome.commands?.getAll?.().catch(() => []) ?? [];
         const shortcut = commands.find((c) => c.name === "open-panel")?.shortcut || "";
-        return { dock: dock === "left" ? "left" : "right", firstUseSeen: firstUseSeen === true, shortcut };
+        // workerFormats: this worker writes the answer card, so the content script doesn't warm up a model of its own.
+        return { dock: dock === "left" ? "left" : "right", firstUseSeen: firstUseSeen === true, shortcut,
+          workerFormats: typeof LanguageModel !== "undefined" };
       }
       const prefs = {};
       if (["left", "right"].includes(msg.prefs?.dock)) prefs.dock = msg.prefs.dock;

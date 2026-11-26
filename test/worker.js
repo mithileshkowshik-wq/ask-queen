@@ -115,7 +115,7 @@ function runWorkerTests(test) {
     assert.deepEqual(w.accesses, ["TRUSTED_CONTEXTS", "TRUSTED_CONTEXTS"]);
     await w.message({ type: "setPrefs", prefs: { firstUseSeen: true, dock: "left", token: "hf_other" } });
     assert.equal(settings.token, "hf_demoToken");
-    assert.deepEqual(JSON.parse(JSON.stringify(await w.message({ type: "getPrefs" }))), { firstUseSeen: true, dock: "left", shortcut: "Alt+Q" });
+    assert.deepEqual(JSON.parse(JSON.stringify(await w.message({ type: "getPrefs" }))), { firstUseSeen: true, dock: "left", shortcut: "Alt+Q", workerFormats: false });
   });
   test("Worker strips check and annotation marks before sending SAN to the Space", async () => {
     const w = worker(normal);
@@ -407,6 +407,19 @@ function runWorkerTests(test) {
     await v.clock.advance(0);
     assert.equal(r.last.result.card.source, "rules");
     assert.equal(idle.calls.some(([n]) => n === "create"), false);
+  });
+  test("Worker path: Nano's base session is warmed up when the ask starts, while Queen thinks, and getPrefs says the worker formats", async () => {
+    const LM = fakeLanguageModel({ reply: ITALIAN_REPLY, extension: true });
+    const slow = (record, clock) => record.init.method === "POST" ? start() : stream(record, clock, { chunks: [[15000, answer(record.url)], [15001]] });
+    const w = worker(slow, {}, false, { LanguageModel: LM });
+    assert.equal((await w.message({ type: "getPrefs" })).workerFormats, true);
+    const p = w.open(best);
+    await w.clock.advance(1000);
+    assert.deepEqual(LM.calls.map(([n]) => n), ["availability", "create"], "loading before Queen answers");
+    assert.equal(p.responses.some((m) => m.result), false);
+    await w.clock.advance(15000);
+    assert.equal(p.last.result.card.source, "nano");
+    assert.deepEqual(LM.calls.map(([n]) => n), ["availability", "create", "availability", "clone", "prompt", "destroy"]);
   });
   test("Worker path: a model that never answers gives the rules' card at the 6 s limit", async () => {
     const w = worker(normal, {}, false, { LanguageModel: fakeLanguageModel({ hang: true }) });

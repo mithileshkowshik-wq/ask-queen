@@ -450,6 +450,25 @@ const XSS = [
   hugging[0], '<script>window.aqExecuted=1</script>',
 ];
 
+// The Nano lab's built answer, a Queen text made from the recordings' own sentences: Black to move in the Italian, a different best move, an
+// "equal" evaluation and a short cut-down alternative.
+const builtNf6 = { ...boneyland[0], fen: ITALIAN, best_move_san: "Nf6", best_move_uci: "g8f6", move_source: "best_move",
+  critical_line_san: "3... Nf6 4. d3 Be7 5. O-O O-O 6. Re1 d6", critical_line_uci: ["g8f6", "d2d3", "f8e7", "e1g1", "e8g8", "f1e1", "d7d6"],
+  evaluation: "Equal for both sides, with balanced chances after normal development.", finish_reason: "stop",
+  analysis: `ANALYSIS:
+The position is a quiet Italian Game structure with equal material. White holds a modest space advantage from the white pawn on e4 and the active white bishop on c4 pointing toward f7. Black's plan is to develop quickly and castle before opening the center.
+
+The best move is 3... Nf6, developing the knight to control e4 and attacking the white pawn on e4. It also prepares to castle on the next move. After 4. d3 Be7 5. O-O O-O 6. Re1 d6, Black has a solid position with equal chances.
+
+The alternative 3... Be7 is also sound, developing the king's bishop to a natural square. After 4. O-O Nf6 5. d3 O-O, the position transposes to a quiet structure.
+
+The move 3... d5 is sharply inferior. It immediately opens the center and allows White to win a central pawn with 4. exd5.
+
+BEST_MOVE: 3... Nf6
+CRITICAL_LINE: 3... Nf6 4. d3 Be7 5. O-O O-O 6. Re1 d6
+PROMISING_MOVES: 3... Nf6 3... Be7 3... d5
+EVALUATION: Equal for both sides, with balanced chances after normal development.` };
+
 module.exports = { SITES, REPLY_FENS, positionKey, START, E4, E4_EP, E5, NC6, ITALIAN, OPENING, MATE, FEN_MISMATCH,
   WHITE_CASTLE, BLACK_CASTLE, EN_PASSANT, PROMOTION, UNDERPROMOTION, RECORDED_FEN, RECORDED_MOVES, expand, sse, hugging,
-  truncated, boneyland, boneylandSuccess, XSS };
+  truncated, boneyland, boneylandSuccess, builtNf6, XSS };

@@ -1519,7 +1519,7 @@ async function runBrowser(extension, temp, out, test, packaged) {
             assert.deepEqual(result.estimate, { ahead: "w", words: "White is better", number: "+1.51" });
             assert.deepEqual(result.promising, ["O-O", "c3"]);
             const calls = await sw.evaluate(() => LanguageModel.calls.map((c) => c[0]));
-            assert.deepEqual(calls, ["availability", "create", "clone", "prompt", "destroy"]);
+            assert.deepEqual(calls, ["availability", "create", "availability", "clone", "prompt", "destroy"], "warmed up at ask time");
           });
         } finally { await (await worker(ctx)).evaluate(restore); }
       });

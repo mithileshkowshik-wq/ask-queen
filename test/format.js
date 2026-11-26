@@ -7,8 +7,8 @@ const A = globalThis.AQFormat;
 const C = globalThis.AQChess;
 
 // A scripted LanguageModel. `plan`: availability (default "available"), reply (string), delay (ms, honours the
-// signal), hang (never answers, honours the signal), throws (message), extension (has params(), as extension
-// contexts do). Self-contained so the browser tests can embed its source.
+// signal), hang (never answers, honours the signal), throws (message), createDelay (ms create() takes), extension
+// (has params(), as extension contexts do). Self-contained so the browser tests can embed its source.
 function fakeLanguageModel(plan) {
   const calls = [];
   const wait = (ms, signal) => new Promise((resolve, reject) => {
@@ -31,7 +31,11 @@ function fakeLanguageModel(plan) {
   const LM = {
     calls,
     async availability(options) { calls.push(["availability", JSON.parse(JSON.stringify(options))]); return plan.availability ?? "available"; },
-    async create(options) { calls.push(["create", JSON.parse(JSON.stringify(options))]); return new Session(options); },
+    async create(options) {
+      calls.push(["create", JSON.parse(JSON.stringify(options))]);
+      if (plan.createDelay) await wait(plan.createDelay);
+      return new Session(options);
+    },
   };
   if (plan.extension) LM.params = async () => ({ defaultTopK: 3, maxTopK: 128, defaultTemperature: 1, maxTemperature: 2 });
   return LM;
@@ -108,17 +112,95 @@ function runFormatTests(test) {
     const p = A.prepare(bony);
     const main = A.facts([p.bestText, p.positionText, p.evaluation].join("\n")), castle = A.facts(p.moves[0].text);
     const reasons = (text, f = main) => A.problems(text, f, 200);
-    assert.deepEqual(reasons("Wins a pawn and threatens Qh5 with mate on f7."), ["move Qh5", "claim mate", "claim win"]);
+    assert.deepEqual(reasons("Wins a pawn and threatens Qh5 with mate on f7."), ["move Qh5", "claim mate", "claim win", "ungrounded: wins, threatens, mate"]);
     assert.deepEqual(reasons("White is winning by 3.2 pawns."), ["number 3.2", "claim win"]);
     assert.deepEqual(reasons("Black should reply 4...Qg5, hitting g2."), ["move 4...Qg5", "square g2"]);
     assert.deepEqual(reasons("After 5...Nxf3+ White is fine.", castle), ["move number 5...Nxf3+"]);
-    assert.deepEqual(reasons("It forces a draw.", castle), ["claim forced", "claim draw"]);
+    assert.deepEqual(reasons("It forces a draw.", castle), ["claim forced", "claim draw", "ungrounded: forces, draw"]);
     assert.deepEqual(reasons("The **knight** is strong."), ["markup"]);
-    assert.deepEqual(reasons("See https://example.org now."), ["markup"]);
+    assert.deepEqual(reasons("See https://example.org now."), ["markup", "ungrounded: see, https, example, org, now"]);
     for (const clean of ["Captures the central pawn and centralizes the knight on e5.", "White is better by about 1.51 pawns.",
       "After 6...d6 White keeps the extra pawn."]) assert.deepEqual(reasons(clean), [], clean);
     assert.deepEqual(reasons("Black can answer 4...Nxf3+ and remove White's active knight.", castle), []);
     assert.deepEqual(A.problems("Short.", main, 90, 12), ["under 12 characters"]);
+  });
+
+  // The owner's lab run on Chrome 158 with Gemini Nano: strings it kept, each against the paragraph it summarizes.
+  const built = bg.normalized([F.builtNf6], "boneyland", italian, "boneyland", 14);
+  test("Card grounding: the strings from the Chrome 158 lab run, each against its own source paragraph", () => {
+    const tp = A.prepare(trunc), hp = A.prepare(hug), np = A.prepare(built);
+    const main = (p) => A.facts([p.bestText, p.positionText, p.evaluation].join("\n"));
+    const move = (p, label) => A.facts(p.moves.find((m) => m.label === label).text);
+    const check = (text, f, max) => ({ ungrounded: A.ungrounded(text, f), reasons: A.problems(text, f, max) });
+    // Queen says "win a central pawn" and, after another line, "approximately two pawns": "two-pawn" is not Queen's
+    // word. "gain" is its one ungrounded word, which alone is allowed.
+    assert.deepEqual(check("Opens the center and allows White to gain a two-pawn advantage.", move(hp, "3...d5"), 100),
+      { ungrounded: ["gain"], reasons: ["number word two-pawn"] });
+    // Reported as invented, but every content word is in Queen's paragraph (the sentence is quoted beside each), so no
+    // lexical check can reject them. They join a point about the move to what Queen says after a later line; the
+    // tightened prompt and example ask for one point per string instead.
+    for (const [text, f, max] of [
+      ["Develops the knight to control e4; slightly more comfortable development for White.", move(tp, "3...Nf6"), 100],
+      // "...Black has not yet developed the black bishop to e7 before the knight, giving White a slightly more comfortable development sequence."
+      ["Develops the knight to control e4; Black has not developed the bishop to e7 yet.", move(hp, "3...Nf6"), 100], // the same sentence
+      ["Develops the king's bishop to a natural square; the position transposes to a quiet structure.", move(np, "3...Be7"), 100],
+      // "After 4.O-O Nf6 5.d3 O-O, the position transposes to a quiet structure."
+      ["Develop quickly and castle before opening the center to have balanced chances.", main(np), 110],
+      // "Black's plan is to develop quickly and castle before opening the center." + the evaluation's "balanced chances"
+    ]) assert.deepEqual(check(text, f, max), { ungrounded: [], reasons: [] }, text);
+    // The clean strings are kept against their real sources.
+    for (const [text, f, max] of [
+      ["Develops the king's bishop to a natural square.", main(tp), 90],
+      ["Develops the king's bishop to a natural square.", main(hp), 90],
+      ["Prepares to castle and keeps all central options open.", main(hp), 90],
+      ["Complete development, secure the king, then challenge the center with ...d5.", main(hp), 110],
+      ["Opens the center and allows White to win a central pawn with 4.exd5.", move(hp, "3...d5"), 100],
+      ["Opens the center and allows White to win a central pawn with 4.exd5.", move(tp, "3...d5"), 100],
+      ["Develops the knight to control e4.", move(tp, "3...Nf6"), 100],
+      ["Prepares to castle on the next move.", main(np), 90],
+      ["Complete development, secure the king, prepare the ...d5 break.", main(tp), 110],
+    ]) assert.deepEqual(check(text, f, max), { ungrounded: [], reasons: [] }, text);
+  });
+
+  test("Card grounding: more than one ungrounded content word, after stemming, rejects a string and names the words", () => {
+    const bp = A.prepare(bony), hp = A.prepare(hug);
+    const main = A.facts([bp.bestText, bp.positionText, bp.evaluation].join("\n"));
+    const knight = A.facts(hp.moves[0].text);
+    assert.deepEqual(A.problems("Develops the knight and keeps a lasting initiative.", knight, 100), ["ungrounded: keeps, lasting, initiative"]);
+    // One synonym is allowed ("keeps" for Queen's "retains").
+    assert.deepEqual(A.ungrounded("White keeps the extra pawn and a modest space advantage.", main), ["keeps"]);
+    assert.deepEqual(A.problems("White keeps the extra pawn and a modest space advantage.", main, 110), []);
+    // Stemming: centralizes/centralized, castling/castle, development/developing, possessives; stopwords and the
+    // side, move and Queen words never count.
+    assert.deepEqual(A.ungrounded("Centralizes the knight and prepares castling.", main), []);
+    assert.deepEqual(A.ungrounded("Queen's move gives White's development a central knight.", main), []);
+    assert.deepEqual(["developments", "developing", "develops", "castles", "castling", "king's"].map(A.stem),
+      ["develop", "develop", "develop", "castl", "castl", "king"]);
+  });
+
+  test("Card grounding: number words (one to ten, two-pawn, double, twice, half) need the same word in the source", () => {
+    const tp = A.prepare(trunc), hp = A.prepare(hug), bp = A.prepare(bony);
+    const main = A.facts([bp.bestText, bp.positionText, bp.evaluation].join("\n"));
+    const d5 = (p) => A.facts(p.moves[1].text);
+    assert.deepEqual(A.problems("Allows White to win two pawns.", d5(hp), 100), [], "the backup's paragraph says two pawns");
+    assert.deepEqual(A.problems("Allows White to win two pawns.", d5(tp), 100), ["number word two"]);
+    assert.deepEqual(A.problems("Gives White a two-pawn advantage.", d5(hp), 100), ["number word two-pawn"], "a hyphenated word is compared whole");
+    assert.deepEqual(A.problems("Black gives up half the center.", main, 100), ["number word half"]);
+    assert.deepEqual(A.problems("White doubles the rooks and attacks f7 twice.", main, 100),
+      ["number word doubles", "number word twice", "ungrounded: doubles, twice"]);
+  });
+
+  test("tidy: a grounding failure drops only that string; the report lists each string's ungrounded words", async () => {
+    const hp = A.prepare(hug);
+    const r = await tidy(hug, { reply: JSON.stringify({ why: ["Develops the king's bishop to a natural square."],
+      idea: "Complete development, secure the king, prepare the ...d5 break.",
+      others: [{ move: "3...Nf6", reason: "Develops the knight to control e4." },
+        { move: "3...d5", reason: "Opens the center and allows White to gain a two-pawn advantage." }] }) });
+    assert.equal(r.card.source, "mixed");
+    assert.equal(r.card.others[1].reason, A.rulesCard(hp).others[1].reason);
+    const d5 = r.report.checks.find((c) => c.field === "others 3...d5");
+    assert.deepEqual([d5.kept, d5.reasons, d5.ungrounded], [false, ["number word two-pawn"], ["gain"]]);
+    assert(r.report.checks.filter((c) => c !== d5).every((c) => c.kept && c.ungrounded.length === 0));
   });
 
   test("Card candidates: Queen's list is the schema enum; illegal, repeated and best moves are dropped through AQChess.replay", () => {
@@ -204,6 +286,70 @@ function runFormatTests(test) {
     const long = await tidy({ ...bony, analysis: bony.analysis.replace("The best move is 4.Nxe5,", "The best move is 4.Nxe5, " + "a long aside, ".repeat(500)) }, { reply: reply() });
     assert.equal(long.report.fallback, "input over 6,000 characters");
     assert.equal(creates(long.LM), 0);
+  });
+
+  // The warm-up (AQFormat.warm): the base session is made at ask time, while Queen thinks; the 6 s budget starts
+  // when the answer arrives, so on a real Chrome it mostly covers the prompt (about 4 s).
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const timed = (result, LM, options = {}) => {
+    const reports = [];
+    return A.tidy(result, { languageModel: LM, timeoutMs: 6000, onReport: (r) => reports.push(r), ...options })
+      .then((r) => ({ card: r.card, report: reports[0] }));
+  };
+  test("Warm-up: a slow create() (4.5 s) started at ask time still gives a 'nano' card when the answer arrives 5 s later", async () => {
+    const plan = { createDelay: 4500, delay: 4000, reply: reply() }; // the lab's session and prompt times
+    const warmed = fakeLanguageModel(plan), cold = fakeLanguageModel(plan);
+    const [w, c] = await Promise.all([
+      (async () => { const ready = A.warm(warmed); await sleep(5000); const out = await timed(bony, warmed); return { ...out, ready: await ready }; })(),
+      timed(bony, cold), // no warm-up: create and prompt don't fit in 6 s
+    ]);
+    assert.equal(w.ready, true);
+    assert.equal(w.card.source, "nano");
+    assert(w.report.timings.session < 200, "the base session was ready");
+    assert.equal(creates(warmed), 1, "tidy reused the warm-up's base session");
+    assert.equal(c.card.source, "rules");
+    assert.equal(c.report.fallback, "over the time limit");
+  });
+  test("Warm-up: tidy awaits a pending warm-up within its budget, and a warm-up past the budget still serves the next answer", async () => {
+    const pending = fakeLanguageModel({ createDelay: 450, delay: 50, reply: reply() });
+    A.warm(pending);
+    await sleep(300);
+    const r = await timed(bony, pending, { timeoutMs: 600 });
+    assert.equal(r.card.source, "nano");
+    assert(r.report.timings.session >= 100, "waited for the warm-up");
+    const late = fakeLanguageModel({ createDelay: 900, reply: reply() });
+    A.warm(late);
+    const first = await timed(bony, late, { timeoutMs: 400 });
+    assert.equal(first.card.source, "rules");
+    assert.equal(first.report.fallback, "over the time limit");
+    await sleep(600);
+    assert.equal((await timed(bony, late, { timeoutMs: 400 })).card.source, "nano");
+    assert.equal(creates(late), 1);
+  });
+  test("Warm-up: create() only when availability() is 'available'; a cancelled ask leaves it to finish, and release() destroys it", async () => {
+    for (const availability of ["unavailable", "downloadable", "downloading"]) {
+      const LM = fakeLanguageModel({ availability, reply: reply() });
+      assert.equal(await A.warm(LM), false, availability);
+      assert.deepEqual(LM.calls.map(([n]) => n), ["availability"], availability);
+    }
+    assert.equal(await A.warm(null), false);
+    assert.equal(await A.warm({ availability: () => { throw new Error("boom"); } }), false, "never rejects");
+    assert.equal(await A.warm({ availability: async () => "available", create: async () => { throw new Error("NotAllowedError"); } }), false);
+    // An ask cancelled while tidy waits for the warm-up stops at once; the warm-up finishes and the next ask uses it.
+    const LM = fakeLanguageModel({ createDelay: 300, reply: reply() });
+    const ready = A.warm(LM), ctrl = new AbortController();
+    const cancelled = timed(bony, LM, { signal: ctrl.signal });
+    setTimeout(() => ctrl.abort(new Error("cancelled")), 50);
+    const start = Date.now(), c = await cancelled;
+    assert(Date.now() - start < 200);
+    assert.equal(c.card.source, "rules");
+    assert.match(c.report.fallback, /cancelled/);
+    assert.equal(await ready, true);
+    assert.equal((await timed(bony, LM)).card.source, "nano");
+    assert.equal(creates(LM), 1);
+    A.release(LM);
+    await sleep(0);
+    assert.equal(LM.calls.filter(([n]) => n === "destroy").length, 2, "the clone, then the base");
   });
 
   test("tidy: a slow or failing model falls back to the rules within the time limit and never rejects", async () => {
@@ -296,13 +442,17 @@ function runFormatTests(test) {
       w.chrome = { runtime: { sendMessage: async (m) => { sent.push(m.type); return m.type === "guard" ? bg.guardFields(m.result, null) : undefined; } } };
       const fake = fakeLanguageModel({ reply: reply() });
       w.LanguageModel = fake;
+      w.AQ.warm(); // at ask time: this window's base session starts loading
+      await new Promise(setImmediate);
+      assert.equal(creates(fake), 1);
       const nano = await w.AQ.tidy(bony);
       assert.equal(nano.card.source, "nano");
       assert(sent.length >= 1 && sent.every((t) => t === "guard"));
-      assert.equal(creates(fake), 1);
+      assert.equal(creates(fake), 1, "AQ.tidy reused the warm-up's session");
       const attached = { ...bony, card: { ...nano.card, source: "rules" } };
       assert.equal(await w.AQ.tidy(attached), attached);
       delete w.LanguageModel;
+      w.AQ.warm(); // no LanguageModel: nothing to do, and no error
       assert.equal((await w.AQ.tidy(bony)).card.source, "rules");
       w.chrome.runtime.sendMessage = async () => { throw new Error("Extension context invalidated."); };
       assert.equal((await w.AQ.tidy(bony)).card, null, "no guard, no card");

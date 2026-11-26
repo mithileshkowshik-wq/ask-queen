@@ -637,6 +637,7 @@ summary { min-height: 24px; color: var(--dim); font-size: 13px; cursor: pointer;
         if (id === reqId && port === p && !answered) fail(dead() ? "extension_reloaded" : "cancelled", "The connection to the extension closed.");
       });
       p.postMessage({ type: "ask", ...msg, fresh, ...(prefer && { prefer }) });
+      if (prefs?.workerFormats !== true) AQ.warm?.(); // this window writes the card: load its model meanwhile
     } catch (e) {
       fail("extension_reloaded", String(e?.message || e));
     }
